@@ -1,0 +1,88 @@
+"""Embedding generation for RAG-indexed program retrieval.
+
+Uses Gemini embeddings to create vector representations of
+RPA programs for semantic search.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from preact.llm.client import LLMClient
+    from preact.schemas import RPAProgram
+
+logger = logging.getLogger(__name__)
+
+
+def program_to_embedding_text(program: RPAProgram) -> str:
+    """Convert an RPA program to text suitable for embedding.
+
+    Combines task description, app context, parameters, and state names
+    into a single text for vector embedding.
+    """
+    parts = [
+        program.metadata.task_description,
+        program.metadata.application_context,
+    ]
+    if program.metadata.parameters:
+        parts.append("Parameters: " + ", ".join(program.metadata.parameters))
+    if program.metadata.initial_states:
+        parts.append(
+            "Initial states: " + ", ".join(program.metadata.initial_states)
+        )
+
+    state_names = [s.id.replace("_", " ") for s in program.states[:10]]
+    if state_names:
+        parts.append("Steps: " + " -> ".join(state_names))
+
+    return " | ".join(parts)
+
+
+def program_id_hash(program: RPAProgram) -> str:
+    """Generate a stable hash for a program based on its content."""
+    content = (
+        program.metadata.task_description
+        + program.metadata.application_context
+        + str(sorted(program.metadata.parameters))
+    )
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
+class EmbeddingGenerator:
+    """Generates embeddings using the LLM client."""
+
+    def __init__(self, llm: LLMClient, max_cache_size: int = 500):
+        self.llm = llm
+        self._cache: dict[str, list[float]] = {}
+        self._max_cache_size = max_cache_size
+
+    async def embed_text(self, text: str) -> list[float]:
+        """Generate an embedding for a single text."""
+        cache_key = hashlib.md5(text.encode()).hexdigest()
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        embeddings = await self.llm.embed([text])
+        if embeddings:
+            if len(self._cache) >= self._max_cache_size:
+                # Evict oldest entry
+                oldest = next(iter(self._cache))
+                del self._cache[oldest]
+            self._cache[cache_key] = embeddings[0]
+            return embeddings[0]
+        return []
+
+    async def embed_program(self, program: RPAProgram) -> list[float]:
+        """Generate an embedding for an RPA program."""
+        text = program_to_embedding_text(program)
+        return await self.embed_text(text)
+
+    async def embed_query(self, task: str, context: str = "") -> list[float]:
+        """Generate an embedding for a task query."""
+        query_text = task
+        if context:
+            query_text += f" | Context: {context}"
+        return await self.embed_text(query_text)

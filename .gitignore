@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+rag_db/
+results/
+benchmark/results/
+traces/
+screenshots/
+preact_data/
+vendor/
+*.tar
+.auth/
+benchmark/webarena/configs/

@@ -1,0 +1,142 @@
+[
+  {
+    "task_id": "shop_login_001",
+    "sites": ["testshop"],
+    "intent": "Log in with username 'admin' and password 'admin123'",
+    "start_url": "http://localhost:8080/login",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["url_match"],
+      "reference_url": "http://localhost:8080/products"
+    },
+    "category": "authentication",
+    "difficulty": "easy",
+    "num_steps": 3
+  },
+  {
+    "task_id": "shop_search_001",
+    "sites": ["testshop"],
+    "intent": "Search for 'headphones' in the product catalog",
+    "start_url": "http://localhost:8080/products",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "Wireless Headphones"}
+    },
+    "category": "search",
+    "difficulty": "easy",
+    "num_steps": 2
+  },
+  {
+    "task_id": "shop_search_002",
+    "sites": ["testshop"],
+    "intent": "Find all products in the 'Sports' category sorted by highest rated",
+    "start_url": "http://localhost:8080/products",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "Yoga Mat"}
+    },
+    "category": "search",
+    "difficulty": "medium",
+    "num_steps": 3
+  },
+  {
+    "task_id": "shop_addcart_001",
+    "sites": ["testshop"],
+    "intent": "Log in as admin/admin123, find 'Coffee Maker', and add it to the cart",
+    "start_url": "http://localhost:8080/login",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["url_match"],
+      "reference_url": "http://localhost:8080/cart"
+    },
+    "category": "multi_page",
+    "difficulty": "medium",
+    "num_steps": 6
+  },
+  {
+    "task_id": "shop_addcart_002",
+    "sites": ["testshop"],
+    "intent": "Log in as admin/admin123, search for 'shoes', and add 'Running Shoes' to the cart with quantity 2",
+    "start_url": "http://localhost:8080/login",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["url_match"],
+      "reference_url": "http://localhost:8080/cart"
+    },
+    "category": "multi_page",
+    "difficulty": "medium",
+    "num_steps": 8
+  },
+  {
+    "task_id": "shop_checkout_001",
+    "sites": ["testshop"],
+    "intent": "Log in as admin/admin123, add 'Laptop Stand' to cart, proceed to checkout, fill in name 'John Doe', email 'john@test.com', address '123 Main St', card '4111111111111111', and place the order",
+    "start_url": "http://localhost:8080/login",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "Order Confirmed"}
+    },
+    "category": "end_to_end",
+    "difficulty": "hard",
+    "num_steps": 12
+  },
+  {
+    "task_id": "shop_checkout_002",
+    "sites": ["testshop"],
+    "intent": "Log in as admin/admin123, add 'Yoga Mat' to cart, then add 'Water Bottle' to cart, proceed to checkout, fill in name 'Jane Smith', email 'jane@test.com', address '456 Oak Ave', card '4111111111111111', and place the order",
+    "start_url": "http://localhost:8080/login",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "Order Confirmed"}
+    },
+    "category": "end_to_end",
+    "difficulty": "hard",
+    "num_steps": 15
+  },
+  {
+    "task_id": "shop_browse_001",
+    "sites": ["testshop"],
+    "intent": "Find the cheapest product on the site by sorting products by price (low to high), then tell me its name and price",
+    "start_url": "http://localhost:8080/products",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "Notebook Set"}
+    },
+    "category": "information_retrieval",
+    "difficulty": "easy",
+    "num_steps": 2
+  },
+  {
+    "task_id": "shop_browse_002",
+    "sites": ["testshop"],
+    "intent": "Find the highest-rated product and navigate to its detail page to see how many reviews it has",
+    "start_url": "http://localhost:8080/products",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "312"}
+    },
+    "category": "information_retrieval",
+    "difficulty": "medium",
+    "num_steps": 3
+  },
+  {
+    "task_id": "shop_repeat_001",
+    "sites": ["testshop"],
+    "intent": "Log in as admin/admin123, add 'Desk Lamp' to cart, proceed to checkout, fill in name 'Alice Brown', email 'alice@test.com', address '789 Pine Rd', card '4111111111111111', and place the order",
+    "start_url": "http://localhost:8080/login",
+    "require_login": false,
+    "eval": {
+      "eval_types": ["string_match"],
+      "reference_answers": {"must_include": "Order Confirmed"}
+    },
+    "category": "end_to_end",
+    "difficulty": "hard",
+    "num_steps": 12
+  }
+]
