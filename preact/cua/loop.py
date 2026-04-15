@@ -127,10 +127,23 @@ class CUALoop:
                 )
 
                 # 3. Reason: send screenshot + context to LLM
+                # Inject current base URL for navigate actions
+                system = SYSTEM_PROMPT
+                try:
+                    current_url = await self.env.get_page_url()
+                    from urllib.parse import urlparse
+                    parsed = urlparse(current_url)
+                    base_url = f"{parsed.scheme}://{parsed.netloc}"
+                    system = system.replace(
+                        '"/admin/', f'"{base_url}/admin/'
+                    )
+                except Exception:
+                    pass
+
                 llm_response = await self.llm.complete_with_vision(
                     text_prompt=prompt,
                     images=[screenshot],
-                    system=SYSTEM_PROMPT,
+                    system=system,
                 )
 
                 # 4. Parse action
@@ -254,10 +267,23 @@ class CUALoop:
                 if history_text:
                     prompt += "\n\n" + history_text
 
+                # Inject current base URL for navigate actions
+                fallback_system = SYSTEM_PROMPT
+                try:
+                    current_url = await self.env.get_page_url()
+                    from urllib.parse import urlparse
+                    parsed = urlparse(current_url)
+                    base_url = f"{parsed.scheme}://{parsed.netloc}"
+                    fallback_system = fallback_system.replace(
+                        '"/admin/', f'"{base_url}/admin/'
+                    )
+                except Exception:
+                    pass
+
                 llm_response = await self.llm.complete_with_vision(
                     text_prompt=prompt,
                     images=[screenshot],
-                    system=SYSTEM_PROMPT,
+                    system=fallback_system,
                 )
 
                 action = parse_action(llm_response)
