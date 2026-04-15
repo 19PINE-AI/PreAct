@@ -142,6 +142,10 @@ class ModelGenerator:
             # Fall back to constructing a minimal program from the trace
             return self._fallback_compile(trace)
 
+        # Handle LLM wrapping the program in a list
+        if isinstance(data, list):
+            data = data[0] if data else {}
+
         # Ensure metadata
         if "metadata" not in data:
             data["metadata"] = {}
@@ -150,6 +154,9 @@ class ModelGenerator:
         metadata.setdefault("task_description", trace.task_description)
         metadata.setdefault("application_context", trace.application_context)
         metadata["source_trace_id"] = trace.trace_id
+
+        # Fix malformed action fields (LLM sometimes produces strings)
+        self._fix_transition_actions(data, trace)
 
         try:
             return RPAProgram.model_validate(data)
@@ -217,6 +224,26 @@ class ModelGenerator:
                             return text[start : i + 1]
 
         return text
+
+    def _fix_transition_actions(
+        self, data: dict, trace: InteractionTrace
+    ) -> None:
+        """Fix malformed action fields in transition data.
+
+        LLMs sometimes produce action as a string ("action_click") instead
+        of an object ({"type": "action_click", "target": "..."}). This
+        reconstructs the action objects from the trace when possible.
+        """
+        transitions = data.get("transitions", [])
+        for i, t in enumerate(transitions):
+            action = t.get("action")
+            if isinstance(action, str):
+                # Reconstruct from trace step if available
+                if i < len(trace.steps):
+                    step = trace.steps[i]
+                    t["action"] = step.action.model_dump()
+                else:
+                    t["action"] = {"type": action, "target": "//body"}
 
     def _fallback_compile(self, trace: InteractionTrace) -> RPAProgram:
         """Create a minimal program directly from trace steps.

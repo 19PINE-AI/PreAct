@@ -31,6 +31,7 @@ class ActionType(str, Enum):
     ACTION_KEYPRESS = "action_keypress"
     ACTION_SCROLL = "action_scroll"
     ACTION_DRAG = "action_drag"
+    ACTION_NAVIGATE = "action_navigate"
     WAIT = "wait"
     INSPECT_TEXT = "inspect_text"
     INSPECT_SCREENSHOT = "inspect_screenshot"

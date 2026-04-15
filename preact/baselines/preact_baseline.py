@@ -138,5 +138,5 @@ class PreActBaseline:
 
     def has_cached_artifact(self, task: str) -> bool:
         if self._agent:
-            return self._agent.store.count() > 0
+            return self._agent.store.has_relevant_match(task)
         return False

@@ -146,10 +146,11 @@ class CUALoop:
                     reason = action.description or ""
                     answer = get_done_answer(action)
                     logger.info(
-                        "CUA loop done at step %d: success=%s, reason=%s",
+                        "CUA loop done at step %d: success=%s, reason=%s, answer=%s",
                         step,
                         success,
                         reason,
+                        answer[:200] if answer else "(empty)",
                     )
                     break
 
@@ -317,10 +318,14 @@ class CUALoop:
             return f"type({action.target}, '{action.text}')"
         elif t == ActionType.ACTION_KEYPRESS:
             return f"keypress({action.key})"
+        elif t == ActionType.ACTION_MOVE:
+            return f"hover({action.target})"
         elif t == ActionType.ACTION_SCROLL:
             return f"scroll({action.direction}, {action.amount})"
         elif t == ActionType.WAIT:
             return f"wait({action.ms}ms)"
+        elif t == ActionType.ACTION_NAVIGATE:
+            return f"navigate({action.text})"
         else:
             return f"{t.value}({action.target or ''})"
 
@@ -388,6 +393,10 @@ class CUALoop:
         elif t == ActionType.ACTION_MOVE:
             if action.target:
                 await self.env.move_to(action.target)
+
+        elif t == ActionType.ACTION_NAVIGATE:
+            if action.text:
+                await self.env.navigate(action.text)
 
         else:
             logger.warning("Unhandled action type in CUA: %s", t)

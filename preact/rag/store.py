@@ -246,6 +246,30 @@ class ProgramStore:
         """Return the number of stored programs."""
         return self._collection.count()
 
+    def has_relevant_match(self, task: str, threshold: float = 0.5) -> bool:
+        """Check if there's a relevant program for this task (sync, no API call).
+
+        Uses fast text matching with a higher threshold than query() to avoid
+        wasting time on irrelevant RPA attempts + CUA fallback timeouts.
+        """
+        if self._collection.count() == 0:
+            return False
+
+        task_words = set(task.lower().split())
+        result = self._collection.get(include=["metadatas"])
+
+        for meta in result["metadatas"] or []:
+            desc = meta.get("task_description", "").lower()
+            desc_words = set(desc.split())
+            if not desc_words:
+                continue
+            overlap = len(task_words & desc_words)
+            min_len = min(len(task_words), len(desc_words))
+            score = overlap / min_len if min_len > 0 else 0
+            if score >= threshold:
+                return True
+        return False
+
     async def list_all(self) -> list[dict[str, Any]]:
         """List all stored programs with basic metadata."""
         if self._collection.count() == 0:

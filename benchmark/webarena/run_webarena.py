@@ -165,6 +165,8 @@ async def run_task_with_eval(
     except asyncio.TimeoutError:
         result["error"] = f"timeout_{timeout}s"
         result["time_ms"] = timeout * 1000
+        # Capture partial token usage from the LLM client
+        result["tokens"] = llm.total_input_tokens + llm.total_output_tokens
     except Exception as e:
         result["error"] = str(e)
         logger.error("  Error on task %s: %s", task_id, e)

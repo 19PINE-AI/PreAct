@@ -116,7 +116,13 @@ class BrowserEnvironment:
             await locator.wait_for(state="visible", timeout=timeout_ms)
             return True
         except Exception:
-            return False
+            # Fallback: check if element is in DOM but hidden (e.g. collapsed sidebar)
+            try:
+                locator = self.page.locator(f"xpath={xpath}").first
+                await locator.wait_for(state="attached", timeout=1000)
+                return True
+            except Exception:
+                return False
 
     async def element_text(self, xpath: str) -> str:
         """Extract text content of an element."""
@@ -176,7 +182,15 @@ class BrowserEnvironment:
 
     async def click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
-        await locator.click(timeout=10000)
+        try:
+            await locator.click(timeout=10000)
+        except Exception as e:
+            if "not visible" in str(e).lower():
+                # Fallback: JS click for hidden elements (e.g. collapsed sidebar menus)
+                logger.warning("Element not visible, trying JS click: %s", xpath)
+                await locator.evaluate("el => el.click()")
+            else:
+                raise
 
     async def double_click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
@@ -243,6 +257,12 @@ class BrowserEnvironment:
         await locator.select_option(value)
 
     async def navigate(self, url: str) -> None:
+        # Handle relative URLs by resolving against current page
+        if url.startswith("/") and self._page:
+            current = self._page.url
+            from urllib.parse import urlparse
+            parsed = urlparse(current)
+            url = f"{parsed.scheme}://{parsed.netloc}{url}"
         await self.page.goto(url, wait_until="domcontentloaded")
 
     async def go_back(self) -> None:

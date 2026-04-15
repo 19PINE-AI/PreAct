@@ -69,6 +69,18 @@ async def _action_move(
     await env.move_to(target)
 
 
+async def _action_navigate(
+    action: ActionSpec,
+    env: ComputerEnvironment,
+    ctx: ExecutionContext,
+    llm: LLMClient | None,
+) -> None:
+    url = ctx.resolve_template(action.text) if action.text else None
+    if not url:
+        raise ValueError("action_navigate requires a URL in text field")
+    await env.navigate(url)
+
+
 async def _action_type(
     action: ActionSpec,
     env: ComputerEnvironment,
@@ -84,7 +96,11 @@ async def _action_type(
         raise ValueError("action_type requires either text or parameter_name")
 
     if target:
-        await env.type_text(target, text)
+        try:
+            await env.type_text(target, text)
+        except Exception:
+            # Fallback: element might be a <select> — try select_option
+            await env.select_option(target, text)
     else:
         # Type without a specific target (assume current focus)
         await env.press_key(text)
@@ -282,6 +298,7 @@ _ACTION_HANDLERS = {
     ActionType.ACTION_KEYPRESS: _action_keypress,
     ActionType.ACTION_SCROLL: _action_scroll,
     ActionType.ACTION_DRAG: _action_drag,
+    ActionType.ACTION_NAVIGATE: _action_navigate,
     ActionType.WAIT: _action_wait,
     ActionType.INSPECT_TEXT: _action_inspect_text,
     ActionType.INSPECT_SCREENSHOT: _action_inspect_screenshot,

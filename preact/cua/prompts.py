@@ -18,6 +18,7 @@ Output EXACTLY ONE JSON action per step:
 {"action": "type", "xpath": "<xpath to type into>", "text": "<text to type>"}
 {"action": "keypress", "key": "<key name>"}  — e.g., "Enter", "Tab", "Escape", "Backspace"
 {"action": "select", "xpath": "<xpath of select element>", "value": "<option value or text>"}
+{"action": "hover", "xpath": "<xpath to hover over>"}
 {"action": "scroll", "direction": "down|up", "amount": 3}
 {"action": "wait", "ms": 1000}
 {"action": "navigate", "url": "<url>"}
@@ -41,7 +42,27 @@ Output EXACTLY ONE JSON action per step:
 - If you're stuck or the task is impossible, output {"action": "done", "success": false, "reason": "..."}
 - Be patient with page loads — use wait actions when needed
 - Scroll down if you can't see the target element
-- When working in an admin panel (e.g., Magento Admin), use the admin sidebar navigation and reports rather than browsing the customer-facing storefront
+- For Magento Admin navigation, ALWAYS use the "navigate" action to go directly to the page you need. Do NOT try to use the sidebar menu — it is often collapsed and unreliable. Use these direct URLs:
+  - Sales > Orders: navigate to "/admin/sales/order/"
+  - Reports > Orders: navigate to "/admin/reports/report_sales/orders/"
+  - Reports > Invoiced: navigate to "/admin/reports/report_sales/invoiced/"
+  - Reports > Refunded: navigate to "/admin/reports/report_sales/refunded/"
+  - Reports > Shipping: navigate to "/admin/reports/report_sales/shipping/"
+  - Reports > Tax: navigate to "/admin/reports/report_sales/tax/"
+  - Reports > Bestsellers: navigate to "/admin/reports/report_sales/bestsellers/"
+  - Reports > Products Viewed: navigate to "/admin/reports/report_products/viewed/"
+  - Reports > Coupons: navigate to "/admin/reports/report_sales/coupons/"
+  - Customers > All Customers: navigate to "/admin/customer/index/"
+  - Marketing > Search Terms: navigate to "/admin/search/term/index/"
+  - Reports > Search Terms: navigate to "/admin/reports/search/term/"
+  - Catalog > Products: navigate to "/admin/catalog/product/"
+  - Marketing > Catalog Price Rule: navigate to "/admin/catalog_rule/promo_catalog/"
+  - Marketing > Cart Price Rules: navigate to "/admin/sales_rule/promo_quote/"
+  - Content > Pages: navigate to "/admin/cms/page/"
+  - Reviews > All Reviews: navigate to "/admin/review/product/index/"
+  For example, if the current URL is http://hostname:port/admin, navigate to http://hostname:port/admin/sales/order/
+  Use the same hostname and port visible in the current page URL.
+- When working in an admin panel (e.g., Magento Admin), use direct URL navigation and admin reports rather than browsing the customer-facing storefront
 - Focus on finding exact data from admin reports and database views, not estimating or guessing"""
 
 USER_PROMPT = """Task: {task}

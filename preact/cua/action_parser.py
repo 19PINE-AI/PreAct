@@ -70,6 +70,11 @@ def parse_action(llm_output: str) -> ActionSpec | None:
             type=ActionType.ACTION_KEYPRESS,
             key=data.get("key"),
         )
+    elif action_name == "hover":
+        return ActionSpec(
+            type=ActionType.ACTION_MOVE,
+            target=data.get("xpath"),
+        )
     elif action_name == "scroll":
         return ActionSpec(
             type=ActionType.ACTION_SCROLL,
@@ -89,8 +94,7 @@ def parse_action(llm_output: str) -> ActionSpec | None:
         )
     elif action_name == "navigate":
         return ActionSpec(
-            type=ActionType.ACTION_CLICK,
-            target="//body",
+            type=ActionType.ACTION_NAVIGATE,
             text=data.get("url"),
         )
     elif action_name == "done":

@@ -61,14 +61,18 @@ Produce a JSON object with this exact structure:
 
 ## Action Types
 
-- action_click: {type, target (xpath)}
-- action_type: {type, target (xpath), text | parameter_name}
-- action_keypress: {type, key}
-- wait: {type, ms}
-- inspect_text: {type, target (xpath), prompt, store_result_as}
-- inspect_screenshot: {type, target (xpath), prompt, store_result_as}
-- evaluate_condition: {type, expression, store_result_as}
-- conditional: {type, condition} — for branching transitions
+Each action MUST be a JSON object with a "type" field. NEVER use a string — always use the full object format.
+
+- action_click: {"type": "action_click", "target": "<xpath>"}
+- action_type: {"type": "action_type", "target": "<xpath>", "text": "<literal>" | "parameter_name": "<param>"}
+- action_keypress: {"type": "action_keypress", "key": "<key>"}
+- action_scroll: {"type": "action_scroll", "direction": "down|up", "amount": 3}
+- action_navigate: {"type": "action_navigate", "text": "<url>"}
+- wait: {"type": "wait", "ms": <milliseconds>}
+- inspect_text: {"type": "inspect_text", "target": "<xpath>", "prompt": "<question>", "store_result_as": "<key>"}
+- inspect_screenshot: {"type": "inspect_screenshot", "target": "<xpath>", "prompt": "<question>", "store_result_as": "<key>"}
+- evaluate_condition: {"type": "evaluate_condition", "expression": "<expr>", "store_result_as": "<key>"}
+- conditional: {"type": "conditional", "condition": "<guard>"} — for branching transitions
 """
 
 USER_PROMPT_COMPILE = """Analyze the following interaction trace and compile it into a JSON state machine program.
