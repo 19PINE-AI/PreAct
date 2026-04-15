@@ -93,6 +93,7 @@ class WorkflowUseBaseline:
             actions_via_cache=0,
             actions_via_llm=cua_result.actions_taken,
             error=cua_result.error,
+            extra={"answer": cua_result.answer},
         )
 
     async def run_replay(

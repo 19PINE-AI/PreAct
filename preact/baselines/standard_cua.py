@@ -55,6 +55,7 @@ class StandardCUABaseline:
             actions_via_cache=0,
             actions_via_llm=result.actions_taken,
             error=result.error,
+            extra={"answer": result.answer},
         )
 
     async def reset(self) -> None:

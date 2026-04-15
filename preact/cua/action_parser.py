@@ -81,6 +81,12 @@ def parse_action(llm_output: str) -> ActionSpec | None:
             type=ActionType.WAIT,
             ms=data.get("ms", 1000),
         )
+    elif action_name == "select":
+        return ActionSpec(
+            type=ActionType.ACTION_TYPE,
+            target=data.get("xpath"),
+            text=data.get("value", ""),
+        )
     elif action_name == "navigate":
         return ActionSpec(
             type=ActionType.ACTION_CLICK,
@@ -89,11 +95,15 @@ def parse_action(llm_output: str) -> ActionSpec | None:
         )
     elif action_name == "done":
         # Special sentinel — not a real action
+        # Capture answer for information retrieval tasks
+        answer = data.get("answer", "")
+        reason = data.get("reason", "")
         return ActionSpec(
             type=ActionType.WAIT,
             ms=0,
             description=f"done:{'success' if data.get('success') else 'failure'}:"
-            f"{data.get('reason', '')}",
+            f"{reason}",
+            text=answer if answer else None,
         )
     else:
         logger.warning("Unknown action type: %s", action_name)
@@ -114,3 +124,22 @@ def is_done_success(action: ActionSpec) -> bool:
         action.description is not None
         and action.description.startswith("done:success")
     )
+
+
+def get_done_answer(action: ActionSpec) -> str:
+    """Extract the answer from a 'done' action (for info retrieval tasks).
+
+    First checks the explicit answer field (action.text).
+    Falls back to extracting from the reason/description if no answer
+    field was provided.
+    """
+    if action.text:
+        return action.text
+
+    # Fallback: try to extract answer from the reason field
+    if action.description and "done:success:" in action.description:
+        reason = action.description.split("done:success:", 1)[1]
+        if reason:
+            return reason.strip()
+
+    return ""

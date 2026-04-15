@@ -10,7 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
-WEBARENA_ROOT = Path(__file__).parent.parent.parent / "vendor" / "webarena"
+WEBARENA_ROOT = Path(__file__).parent.parent.parent / "vendor" / "webarena" / "repo"
 CONFIG_DIR = Path(__file__).parent / "configs"
 
 # Default ports for WebArena services
@@ -53,7 +53,12 @@ def generate_task_configs(
     # Build URL replacement map
     url_map = {}
     for site_upper, port in DEFAULT_PORTS.items():
-        url_map[f"__{site_upper}__"] = f"http://{hostname}:{port}"
+        base = f"http://{hostname}:{port}"
+        # SHOPPING_ADMIN maps to /admin path (the Magento admin panel)
+        if site_upper == "SHOPPING_ADMIN":
+            url_map[f"__{site_upper}__"] = f"{base}/admin"
+        else:
+            url_map[f"__{site_upper}__"] = base
 
     # Filter tasks by site
     site_set = set(sites)

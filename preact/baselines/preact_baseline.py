@@ -63,6 +63,10 @@ class PreActBaseline:
             force_cua=True,
         )
 
+        answer = ""
+        if result.cua_result:
+            answer = result.cua_result.answer
+
         return BaselineResult(
             success=result.success,
             mode="exploration",
@@ -76,6 +80,7 @@ class PreActBaseline:
             extra={
                 "program_id": result.program_id,
                 "program_was_new": result.program_was_new,
+                "answer": answer,
             },
         )
 
@@ -97,7 +102,13 @@ class PreActBaseline:
         actions_cua = 0
         if result.execution_result:
             actions_rpa = result.execution_result.actions_via_rpa
-            actions_cua = result.execution_result.actions_via_cua
+        if result.cua_result:
+            actions_cua = result.cua_result.actions_taken
+
+        # Extract answer: prefer CUA answer (from fallback), as RPA can't extract text
+        answer = ""
+        if result.cua_result and result.cua_result.answer:
+            answer = result.cua_result.answer
 
         return BaselineResult(
             success=result.success,
@@ -115,6 +126,7 @@ class PreActBaseline:
             extra={
                 "program_id": result.program_id,
                 "program_was_extended": result.program_was_extended,
+                "answer": answer,
                 "graph_coverage": result.execution_result.graph_coverage
                 if result.execution_result
                 else 0,

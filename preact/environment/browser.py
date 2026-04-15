@@ -31,12 +31,14 @@ class BrowserEnvironment:
         viewport: dict[str, int] | None = None,
         start_url: str | None = None,
         slow_mo: int = 0,
+        storage_state: str | None = None,
     ):
         self._headless = headless
         self._browser_type = browser_type
         self._viewport = viewport or {"width": 1280, "height": 720}
         self._start_url = start_url
         self._slow_mo = slow_mo
+        self._storage_state = storage_state
 
         self._pw: Playwright | None = None
         self._browser: Browser | None = None
@@ -59,10 +61,13 @@ class BrowserEnvironment:
             headless=self._headless,
             slow_mo=self._slow_mo,
         )
-        self._context = await self._browser.new_context(
-            viewport=self._viewport,
-            ignore_https_errors=True,
-        )
+        ctx_kwargs: dict = {
+            "viewport": self._viewport,
+            "ignore_https_errors": True,
+        }
+        if self._storage_state:
+            ctx_kwargs["storage_state"] = self._storage_state
+        self._context = await self._browser.new_context(**ctx_kwargs)
         self._page = await self._context.new_page()
         if self._start_url:
             await self._page.goto(self._start_url, wait_until="domcontentloaded")
@@ -171,15 +176,15 @@ class BrowserEnvironment:
 
     async def click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
-        await locator.click()
+        await locator.click(timeout=10000)
 
     async def double_click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
-        await locator.dblclick()
+        await locator.dblclick(timeout=10000)
 
     async def right_click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
-        await locator.click(button="right")
+        await locator.click(button="right", timeout=10000)
 
     async def type_text(self, xpath: str, text: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first

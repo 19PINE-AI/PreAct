@@ -17,10 +17,11 @@ Output EXACTLY ONE JSON action per step:
 {"action": "click", "xpath": "<xpath to click>"}
 {"action": "type", "xpath": "<xpath to type into>", "text": "<text to type>"}
 {"action": "keypress", "key": "<key name>"}  — e.g., "Enter", "Tab", "Escape", "Backspace"
+{"action": "select", "xpath": "<xpath of select element>", "value": "<option value or text>"}
 {"action": "scroll", "direction": "down|up", "amount": 3}
 {"action": "wait", "ms": 1000}
 {"action": "navigate", "url": "<url>"}
-{"action": "done", "success": true|false, "reason": "<why>"}
+{"action": "done", "success": true|false, "reason": "<why>", "answer": "<answer if task asks a question>"}
 
 ## XPath Guidelines
 
@@ -34,10 +35,14 @@ Output EXACTLY ONE JSON action per step:
 
 - Output ONLY the JSON action, no other text before or after
 - Take ONE action per step — do not output multiple actions
-- If the task is complete, output {"action": "done", "success": true, "reason": "..."}
+- If the task is complete, output {"action": "done", "success": true, "reason": "...", "answer": "..."}
+- If the task asks a question (e.g., "What is...", "How many...", "List the..."), you MUST include the answer in the "answer" field of the done action. Read the exact text from the page — do not describe what you see, return the actual value. For example: {"action": "done", "success": true, "reason": "Found the value", "answer": "$36.39"} NOT {"action": "done", "success": true, "reason": "The total is displayed on screen", "answer": ""}
+- Always extract concrete data values from the screen. If the task asks for a number, name, date, or other specific value, read it from the page and put it in the "answer" field.
 - If you're stuck or the task is impossible, output {"action": "done", "success": false, "reason": "..."}
 - Be patient with page loads — use wait actions when needed
-- Scroll down if you can't see the target element"""
+- Scroll down if you can't see the target element
+- When working in an admin panel (e.g., Magento Admin), use the admin sidebar navigation and reports rather than browsing the customer-facing storefront
+- Focus on finding exact data from admin reports and database views, not estimating or guessing"""
 
 USER_PROMPT = """Task: {task}
 

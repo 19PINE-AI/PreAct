@@ -193,12 +193,14 @@ class ModelGenerator:
         # Try to find JSON in code blocks
         if "```json" in text:
             start = text.index("```json") + 7
-            end = text.index("```", start)
-            return text[start:end].strip()
+            closing = text.find("```", start)
+            if closing != -1:
+                return text[start:closing].strip()
         if "```" in text:
             start = text.index("```") + 3
-            end = text.index("```", start)
-            return text[start:end].strip()
+            closing = text.find("```", start)
+            if closing != -1:
+                return text[start:closing].strip()
 
         # Try to find raw JSON
         for start_char, end_char in [("{", "}"), ("[", "]")]:

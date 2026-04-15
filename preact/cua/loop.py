@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from preact.config import CUAConfig
-from preact.cua.action_parser import is_done_action, is_done_success, parse_action
+from preact.cua.action_parser import is_done_action, is_done_success, get_done_answer, parse_action
 from preact.cua.prompts import SYSTEM_PROMPT, USER_PROMPT, USER_PROMPT_FALLBACK
 from preact.schemas import ActionSpec, ActionType
 
@@ -37,6 +37,7 @@ class CUAResult:
     actions_taken: int
     total_time_ms: float
     reason: str = ""
+    answer: str = ""  # Text answer for information retrieval tasks
     error: str | None = None
     trace: Any = None  # InteractionTrace, if recorded
 
@@ -97,6 +98,7 @@ class CUALoop:
         actions_taken = 0
         success = False
         reason = ""
+        answer = ""
         error = None
 
         # Conversation history for multi-turn reasoning
@@ -142,6 +144,7 @@ class CUALoop:
                 if is_done_action(action):
                     success = is_done_success(action)
                     reason = action.description or ""
+                    answer = get_done_answer(action)
                     logger.info(
                         "CUA loop done at step %d: success=%s, reason=%s",
                         step,
@@ -192,6 +195,7 @@ class CUALoop:
             actions_taken=actions_taken,
             total_time_ms=total_time,
             reason=reason,
+            answer=answer,
             error=error,
             trace=trace,
         )
@@ -224,6 +228,7 @@ class CUALoop:
         actions_taken = 0
         success = False
         reason = ""
+        answer = ""
         error = None
         action_history: list[str] = []
 
@@ -261,6 +266,7 @@ class CUALoop:
                 if is_done_action(action):
                     success = is_done_success(action)
                     reason = action.description or ""
+                    answer = get_done_answer(action)
                     break
 
                 action_desc = self._describe_action(action)
@@ -297,6 +303,7 @@ class CUALoop:
             actions_taken=actions_taken,
             total_time_ms=total_time,
             reason=reason,
+            answer=answer,
             error=error,
             trace=trace,
         )
@@ -323,7 +330,27 @@ class CUALoop:
 
         if t == ActionType.ACTION_CLICK:
             if action.target:
-                await self.env.click(action.target)
+                # Handle clicks on <option> elements by converting to select_option
+                if "option" in action.target.lower() and (
+                    "@value=" in action.target or "text()" in action.target
+                ):
+                    try:
+                        await self.env.click(action.target)
+                    except Exception:
+                        # Extract value from xpath and find parent select
+                        import re
+                        val_match = re.search(r"@value=['\"]([^'\"]+)['\"]", action.target)
+                        text_match = re.search(r"text\(\)\s*,\s*['\"]([^'\"]+)['\"]", action.target)
+                        val = (val_match or text_match)
+                        if val:
+                            # Try to find parent select and select the option
+                            select_xpath = action.target.rsplit("/option", 1)[0] if "/option" in action.target else "//select"
+                            try:
+                                await self.env.select_option(select_xpath, val.group(1))
+                            except Exception:
+                                raise
+                else:
+                    await self.env.click(action.target)
 
         elif t == ActionType.ACTION_DOUBLE_CLICK:
             if action.target:

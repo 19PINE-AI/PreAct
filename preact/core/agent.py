@@ -176,6 +176,18 @@ class PreActAgent:
         if exec_result.success:
             result.success = True
             result.execution_result = exec_result
+
+            # For information retrieval tasks, extract the answer from screen
+            if self._is_info_retrieval_task(task):
+                answer = await self._extract_answer_from_screen(task)
+                if answer:
+                    result.cua_result = CUAResult(
+                        success=True,
+                        actions_taken=0,
+                        total_time_ms=0,
+                        answer=answer,
+                    )
+
             return result
 
         # ─── Fallback to CUA ──────────────────────────────────────
@@ -296,12 +308,14 @@ class PreActAgent:
             text = response.strip()
             if "```json" in text:
                 start = text.index("```json") + 7
-                end = text.index("```", start)
-                text = text[start:end].strip()
+                closing = text.find("```", start)
+                if closing != -1:
+                    text = text[start:closing].strip()
             elif "```" in text:
                 start = text.index("```") + 3
-                end = text.index("```", start)
-                text = text[start:end].strip()
+                closing = text.find("```", start)
+                if closing != -1:
+                    text = text[start:closing].strip()
             params = _json.loads(text)
             logger.info("LLM-extracted parameters: %s", params)
             return params
@@ -392,3 +406,37 @@ class PreActAgent:
             results.append(result)
 
         return results
+
+    @staticmethod
+    def _is_info_retrieval_task(task: str) -> bool:
+        """Check if task requires extracting information from the screen."""
+        lower = task.lower()
+        patterns = [
+            "what is", "what are", "how many", "how much",
+            "tell me", "show me", "list the", "list all",
+            "give me", "find the", "which", "who",
+            "present", "count", "total", "number of",
+        ]
+        return any(p in lower for p in patterns)
+
+    async def _extract_answer_from_screen(self, task: str) -> str:
+        """Take a screenshot and extract the answer using vision LLM."""
+        try:
+            screenshot = await self.env.screenshot()
+            prompt = (
+                f"Task: {task}\n\n"
+                f"Look at this screenshot and extract the exact answer to the task. "
+                f"Return ONLY the answer value — no explanation, no full sentences. "
+                f"For example, if asked 'What is the total?', return '$36.39', not "
+                f"'The total is $36.39'."
+            )
+            response = await self.llm.complete_with_vision(
+                text_prompt=prompt,
+                images=[screenshot],
+            )
+            answer = response.strip().strip('"').strip("'")
+            logger.info("Extracted answer from screen: %s", answer[:100])
+            return answer
+        except Exception as e:
+            logger.warning("Failed to extract answer from screen: %s", e)
+            return ""
