@@ -112,18 +112,30 @@ class CUALoop:
                 # 1. Observe: capture screenshot
                 screenshot = await self.env.screenshot()
 
-                # 2. Build context with action history
+                # 2. Build context with action history and interactive elements
                 history_text = ""
                 if action_history:
                     history_text = "Previous actions taken:\n" + "\n".join(
                         f"  Step {i+1}: {a}" for i, a in enumerate(action_history)
                     ) + "\n\nContinue from where you left off. Do NOT repeat actions already taken."
 
+                # Extract interactive elements from DOM to help with xpath generation
+                elements_text = ""
+                try:
+                    elements_text = await self._get_interactive_elements()
+                except Exception:
+                    pass
+
+                context = history_text
+                if elements_text:
+                    context += ("\n\nInteractive elements on page "
+                                "(use these xpaths):\n" + elements_text)
+
                 prompt = USER_PROMPT.format(
                     task=task,
                     step_number=step,
                     max_steps=max_steps,
-                    context=history_text,
+                    context=context,
                 )
 
                 # 3. Reason: send screenshot + context to LLM
@@ -432,3 +444,57 @@ class CUALoop:
 
         else:
             logger.warning("Unhandled action type in CUA: %s", t)
+
+    async def _get_interactive_elements(self) -> str:
+        """Extract interactive elements from DOM for xpath guidance.
+
+        Returns a compact list of clickable/typeable elements with their
+        actual IDs and names so the LLM can generate correct xpaths.
+        """
+        elements = await self.env.evaluate_js("""() => {
+            const results = [];
+            const selectors = [
+                'input[type=text]:not([type=hidden])',
+                'input[type=search]',
+                'input:not([type])',
+                'select',
+                'button:not([disabled])',
+                'a[href]',
+                'textarea',
+            ];
+            for (const sel of selectors) {
+                for (const el of document.querySelectorAll(sel)) {
+                    if (el.offsetParent === null && el.tagName !== 'INPUT') continue;
+                    const tag = el.tagName.toLowerCase();
+                    const id = el.id;
+                    const name = el.name;
+                    const ph = el.placeholder;
+                    const text = (el.textContent || '').trim().slice(0, 40);
+                    const label = el.getAttribute('aria-label') || '';
+                    const title = el.title || '';
+                    let xpath = '';
+                    if (id) {
+                        xpath = `//*[@id='${id}']`;
+                    } else if (name) {
+                        xpath = `//${tag}[@name='${name}']`;
+                    } else if (ph) {
+                        xpath = `//${tag}[@placeholder='${ph}']`;
+                    } else if (label) {
+                        xpath = `//${tag}[@aria-label='${label}']`;
+                    } else if (text && tag !== 'a') {
+                        xpath = `//${tag}[contains(text(),'${text.slice(0,25)}')]`;
+                    }
+                    if (!xpath) continue;
+                    const desc = [tag];
+                    if (id) desc.push('id=' + id);
+                    if (name) desc.push('name=' + name);
+                    if (ph) desc.push('placeholder=' + ph);
+                    if (text && tag !== 'input') desc.push('"' + text.slice(0,30) + '"');
+                    results.push(xpath + ' (' + desc.join(', ') + ')');
+                    if (results.length >= 30) break;
+                }
+                if (results.length >= 30) break;
+            }
+            return results.join('\\n');
+        }""")
+        return elements if isinstance(elements, str) else ""
