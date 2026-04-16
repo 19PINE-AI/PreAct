@@ -94,6 +94,7 @@ class LLMClient:
         images: list[bytes],
         system: str | None = None,
         response_format: dict | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """Send a vision request with images to Claude.
 
@@ -102,6 +103,7 @@ class LLMClient:
             images: List of image bytes (PNG/JPEG).
             system: Optional system instruction.
             response_format: If provided, hint for JSON output.
+            max_tokens: Override max_output_tokens for this call.
 
         Returns:
             The model's text response.
@@ -123,7 +125,7 @@ class LLMClient:
 
         kwargs: dict[str, Any] = {
             "model": self.config.model,
-            "max_tokens": self.config.max_output_tokens,
+            "max_tokens": max_tokens or self.config.max_output_tokens,
             "messages": [{"role": "user", "content": content}],
             "temperature": self.config.temperature,
         }

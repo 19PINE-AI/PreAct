@@ -144,12 +144,17 @@ class CUALoop:
                     text_prompt=prompt,
                     images=[screenshot],
                     system=system,
+                    max_tokens=300,
                 )
 
                 # 4. Parse action
                 action = parse_action(llm_response)
                 if not action:
-                    logger.warning("Step %d: Failed to parse action", step)
+                    logger.warning(
+                        "Step %d: Failed to parse action: %s",
+                        step,
+                        llm_response[:200],
+                    )
                     action_history.append(f"[failed to parse: {llm_response[:80]}]")
                     continue
 
@@ -284,6 +289,7 @@ class CUALoop:
                     text_prompt=prompt,
                     images=[screenshot],
                     system=fallback_system,
+                    max_tokens=300,
                 )
 
                 action = parse_action(llm_response)

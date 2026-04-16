@@ -32,10 +32,12 @@ Output EXACTLY ONE JSON action per step:
 - Use visible text: //a[normalize-space()='Sign In']
 - For inputs: //input[@name='email'] or //input[@placeholder='Email']
 
-## Important Rules
+## CRITICAL OUTPUT FORMAT
 
-- Output ONLY the JSON action, no other text before or after
-- Take ONE action per step — do not output multiple actions
+- Your response must be a SINGLE JSON object — nothing else
+- Do NOT include reasoning, explanations, or commentary — ONLY the JSON
+- Do NOT output multiple JSON objects — output exactly ONE
+- Start your response directly with the JSON (it will be prefilled with {"action":)
 - If the task is complete, output {"action": "done", "success": true, "reason": "...", "answer": "..."}
 - If the task asks a question (e.g., "What is...", "How many...", "List the..."), you MUST include the answer in the "answer" field of the done action. Read the exact text from the page — do not describe what you see, return the actual value. For example: {"action": "done", "success": true, "reason": "Found the value", "answer": "$36.39"} NOT {"action": "done", "success": true, "reason": "The total is displayed on screen", "answer": ""}
 - Always extract concrete data values from the screen. If the task asks for a number, name, date, or other specific value, read it from the page and put it in the "answer" field.
@@ -75,7 +77,9 @@ Current step: {step_number}/{max_steps}
 
 {context}
 
-Look at the current screenshot and decide the next action to take."""
+Look at the current screenshot and decide the next action to take.
+
+Respond with a SINGLE JSON object only. No reasoning text."""
 
 USER_PROMPT_FALLBACK = """Task: {task}
 
