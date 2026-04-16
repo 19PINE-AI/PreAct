@@ -35,11 +35,10 @@ def parse_action(llm_output: str) -> ActionSpec | None:
         if match:
             text = match.group(1).strip()
 
-    # Try to find JSON object in text
-    if not text.startswith("{"):
-        match = re.search(r"\{[^{}]*\}", text)
-        if match:
-            text = match.group(0)
+    # Extract the first JSON object from text
+    match = re.search(r"\{[^{}]*\}", text)
+    if match:
+        text = match.group(0)
 
     try:
         data = json.loads(text)
@@ -58,6 +57,19 @@ def parse_action(llm_output: str) -> ActionSpec | None:
         return ActionSpec(
             type=ActionType.ACTION_DOUBLE_CLICK,
             target=data.get("xpath"),
+        )
+    elif action_name == "triple_click":
+        # Triple-click selects all text — treat as click (clear_and_type handles it)
+        return ActionSpec(
+            type=ActionType.ACTION_CLICK,
+            target=data.get("xpath"),
+        )
+    elif action_name == "clear":
+        # Clear field — treat as type with empty text to trigger clear_and_type
+        return ActionSpec(
+            type=ActionType.ACTION_TYPE,
+            target=data.get("xpath"),
+            text="",
         )
     elif action_name == "type":
         return ActionSpec(
