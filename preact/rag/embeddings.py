@@ -1,7 +1,7 @@
 """Embedding generation for RAG-indexed program retrieval.
 
-Uses Gemini embeddings to create vector representations of
-RPA programs for semantic search.
+Uses ChromaDB's default embedding function (all-MiniLM-L6-v2) for
+vector representations. Falls back to the LLM client's embed method.
 """
 
 from __future__ import annotations
@@ -15,6 +15,21 @@ if TYPE_CHECKING:
     from preact.schemas import RPAProgram
 
 logger = logging.getLogger(__name__)
+
+# Module-level singleton for the embedding function
+_default_ef = None
+
+
+def _get_default_ef():
+    """Get or create the default ChromaDB embedding function."""
+    global _default_ef
+    if _default_ef is None:
+        try:
+            from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+            _default_ef = DefaultEmbeddingFunction()
+        except Exception as e:
+            logger.warning("Failed to init default embedding function: %s", e)
+    return _default_ef
 
 
 def program_to_embedding_text(program: RPAProgram) -> str:
@@ -52,12 +67,17 @@ def program_id_hash(program: RPAProgram) -> str:
 
 
 class EmbeddingGenerator:
-    """Generates embeddings using the LLM client."""
+    """Generates embeddings using ChromaDB's default embedding function.
+
+    Falls back to the LLM client's embed method if the default function
+    is unavailable.
+    """
 
     def __init__(self, llm: LLMClient, max_cache_size: int = 500):
         self.llm = llm
         self._cache: dict[str, list[float]] = {}
         self._max_cache_size = max_cache_size
+        self._ef = _get_default_ef()
 
     async def embed_text(self, text: str) -> list[float]:
         """Generate an embedding for a single text."""
@@ -65,14 +85,29 @@ class EmbeddingGenerator:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        embeddings = await self.llm.embed([text])
-        if embeddings:
+        embedding = None
+
+        # Primary: use ChromaDB default embedding function (local, fast)
+        if self._ef is not None:
+            try:
+                results = self._ef([text])
+                if results:
+                    embedding = list(results[0])
+            except Exception as e:
+                logger.debug("Default embedding failed, using LLM fallback: %s", e)
+
+        # Fallback: use LLM client's embed method
+        if embedding is None:
+            embeddings = await self.llm.embed([text])
+            if embeddings:
+                embedding = embeddings[0]
+
+        if embedding:
             if len(self._cache) >= self._max_cache_size:
-                # Evict oldest entry
                 oldest = next(iter(self._cache))
                 del self._cache[oldest]
-            self._cache[cache_key] = embeddings[0]
-            return embeddings[0]
+            self._cache[cache_key] = embedding
+            return embedding
         return []
 
     async def embed_program(self, program: RPAProgram) -> list[float]:

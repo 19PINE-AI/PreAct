@@ -179,6 +179,19 @@ class PreActAgent:
 
             # For information retrieval tasks, extract the answer from screen
             if self._is_info_retrieval_task(task):
+                # Wait for page to fully render after RPA replay
+                # RPA executes actions back-to-back with no natural delay,
+                # so data may not be visible yet when terminal state is reached
+                try:
+                    await self.env.page.wait_for_load_state(
+                        "networkidle", timeout=5000
+                    )
+                except Exception:
+                    pass
+                # Additional settle time for dynamic content (Magento tables, etc.)
+                import asyncio
+                await asyncio.sleep(2)
+
                 answer = await self._extract_answer_from_screen(task)
                 if answer:
                     result.cua_result = CUAResult(
@@ -253,21 +266,48 @@ class PreActAgent:
             result.success = True
 
             # ─── Compile trace into program ───────────────────────
-            try:
-                logger.info("Compiling CUA trace into state machine...")
-                trace = cua_result.trace
-                if trace:
-                    program = await self.generator.compile(trace)
-                    program_id = await self.store.store(program)
-                    result.program_id = program_id
-                    result.program_was_new = True
+            trace = cua_result.trace
+            if trace and len(trace.steps) > 0:
+                program = None
+                try:
                     logger.info(
-                        "New program stored: %s (%d states)",
-                        program_id,
-                        len(program.states),
+                        "Compiling CUA trace into state machine (%d steps)...",
+                        len(trace.steps),
                     )
-            except Exception as e:
-                logger.warning("Program compilation failed: %s", e)
+                    program = await self.generator.compile(trace)
+                except Exception as e:
+                    logger.warning(
+                        "LLM compilation failed: %s — trying fallback", e
+                    )
+
+                # If LLM compilation failed, use fallback compiler directly
+                if program is None:
+                    try:
+                        program = self.generator._fallback_compile(trace)
+                        logger.info(
+                            "Fallback compiled: %d states", len(program.states)
+                        )
+                    except Exception as e2:
+                        logger.error(
+                            "Fallback compilation also failed: %s", e2
+                        )
+
+                if program is not None:
+                    try:
+                        program_id = await self.store.store(program)
+                        result.program_id = program_id
+                        result.program_was_new = True
+                        logger.info(
+                            "New program stored: %s (%d states)",
+                            program_id,
+                            len(program.states),
+                        )
+                    except Exception as e:
+                        logger.error("Failed to store program: %s", e)
+            elif trace:
+                logger.warning(
+                    "CUA succeeded but trace has no steps — cannot compile"
+                )
 
         result.error = cua_result.error
         return result
@@ -425,16 +465,33 @@ class PreActAgent:
             screenshot = await self.env.screenshot()
             prompt = (
                 f"Task: {task}\n\n"
-                f"Look at this screenshot and extract the exact answer to the task. "
-                f"Return ONLY the answer value — no explanation, no full sentences. "
-                f"For example, if asked 'What is the total?', return '$36.39', not "
-                f"'The total is $36.39'."
+                f"Look at this screenshot carefully and extract the exact answer to the task.\n\n"
+                f"Instructions:\n"
+                f"- Return ONLY the answer value — no explanation, no full sentences.\n"
+                f"- Read data directly from tables, forms, or page content visible in the screenshot.\n"
+                f"- For tables: identify the correct row and column, then read the cell value.\n"
+                f"- For names: return the full name as shown (e.g., 'John Doe').\n"
+                f"- For amounts: include the currency symbol (e.g., '$36.39').\n"
+                f"- For dates: return in the format shown on screen.\n"
+                f"- For multiple values: separate with ', ' (e.g., 'John Doe, john@example.com').\n"
+                f"- If the data is not visible in the screenshot, say 'N/A'.\n"
+                f"- Do NOT guess or make up values. Only return what you can clearly read.\n"
             )
             response = await self.llm.complete_with_vision(
                 text_prompt=prompt,
                 images=[screenshot],
             )
             answer = response.strip().strip('"').strip("'")
+            # Filter out non-answers
+            if answer.lower() in (
+                "n/a",
+                "information not available in the image",
+                "not available",
+                "cannot determine",
+                "unable to determine",
+            ):
+                logger.warning("Answer extraction returned non-answer: %s", answer)
+                return ""
             logger.info("Extracted answer from screen: %s", answer[:100])
             return answer
         except Exception as e:

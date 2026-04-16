@@ -1,6 +1,6 @@
 """Model Generator — compiles interaction traces into JSON state machines.
 
-Uses Gemini 3 Flash to analyze recorded traces and produce formal
+Uses the LLM to analyze recorded traces and produce formal
 state transition graphs that can be directly executed by the RPA Executor.
 """
 

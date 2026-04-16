@@ -1,7 +1,7 @@
 """Standard CUA Loop — observe-reason-act agent.
 
 Implements the baseline CUA agent that captures screenshots, sends them
-to Gemini 3 Flash for reasoning, and executes the resulting actions.
+to Claude Sonnet for reasoning, and executes the resulting actions.
 Integrates with the Interaction Recorder for trace collection.
 
 IMPORTANT: Maintains conversation history across steps so the LLM
@@ -50,7 +50,7 @@ class CUALoop:
 
     Each step:
     1. Capture screenshot from environment
-    2. Send screenshot + history to Gemini 3 Flash
+    2. Send screenshot + history to Claude Sonnet
     3. Parse the LLM's action response
     4. Execute the action via the environment
     5. Record the step in the Interaction Recorder

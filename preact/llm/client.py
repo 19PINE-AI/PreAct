@@ -1,14 +1,14 @@
-"""LLM client wrapping Gemini 3 Flash via google-genai SDK."""
+"""LLM client wrapping Claude Sonnet via Anthropic SDK."""
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from typing import Any
 
-from google import genai
-from google.genai import types
+import anthropic
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from preact.config import LLMConfig
@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """Async wrapper around Gemini 3 Flash for all PreAct LLM calls.
+    """Async wrapper around Claude Sonnet for all PreAct LLM calls.
 
     Tracks token usage for cost analysis across all invocations.
     """
 
     def __init__(self, config: LLMConfig | None = None):
         self.config = config or LLMConfig()
-        self._client = genai.Client(api_key=self.config.api_key)
+        self._client = anthropic.AsyncAnthropic(api_key=self.config.api_key)
         self.total_input_tokens: int = 0
         self.total_output_tokens: int = 0
         self._call_count: int = 0
@@ -39,38 +39,50 @@ class LLMClient:
         system: str | None = None,
         response_format: dict | None = None,
     ) -> str:
-        """Send a text completion request to Gemini.
+        """Send a text completion request to Claude.
 
         Args:
-            messages: List of {"role": "user"|"model", "content": str} dicts.
+            messages: List of {"role": "user"|"assistant", "content": str} dicts.
             system: Optional system instruction.
-            response_format: If provided, request JSON output with this schema.
+            response_format: If provided, hint for JSON output (via prompt).
 
         Returns:
             The model's text response.
         """
-        contents = self._build_contents(messages)
+        # Normalize roles: convert "model" to "assistant" for Anthropic
+        normalized = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            if role == "model":
+                role = "assistant"
+            normalized.append({"role": role, "content": msg.get("content", "")})
 
-        config = types.GenerateContentConfig(
-            temperature=self.config.temperature,
-            max_output_tokens=self.config.max_output_tokens,
-        )
+        # Anthropic requires alternating user/assistant messages
+        # Merge consecutive same-role messages
+        merged = self._merge_consecutive_messages(normalized)
+
+        # Ensure conversation starts with a user message
+        if merged and merged[0]["role"] != "user":
+            merged.insert(0, {"role": "user", "content": "Begin."})
+
+        kwargs: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_output_tokens,
+            "messages": merged,
+            "temperature": self.config.temperature,
+        }
         if system:
-            config.system_instruction = system
+            # If response_format is requested, add JSON instruction to system
+            if response_format:
+                system += "\n\nYou MUST respond with valid JSON only. No markdown, no explanation."
+            kwargs["system"] = system
+        elif response_format:
+            kwargs["system"] = "You MUST respond with valid JSON only. No markdown, no explanation."
 
-        if response_format:
-            config.response_mime_type = "application/json"
-            config.response_schema = response_format
-
-        response = await asyncio.to_thread(
-            self._client.models.generate_content,
-            model=self.config.model,
-            contents=contents,
-            config=config,
-        )
+        response = await self._client.messages.create(**kwargs)
 
         self._track_usage(response)
-        return response.text or ""
+        return self._extract_text(response)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -83,84 +95,110 @@ class LLMClient:
         system: str | None = None,
         response_format: dict | None = None,
     ) -> str:
-        """Send a vision request with images to Gemini.
+        """Send a vision request with images to Claude.
 
         Args:
             text_prompt: The text portion of the prompt.
             images: List of image bytes (PNG/JPEG).
             system: Optional system instruction.
-            response_format: If provided, request JSON output.
+            response_format: If provided, hint for JSON output.
 
         Returns:
             The model's text response.
         """
-        parts = []
+        content: list[dict[str, Any]] = []
+
         for img in images:
-            parts.append(
-                types.Part.from_bytes(data=img, mime_type="image/png")
-            )
-        parts.append(types.Part.from_text(text=text_prompt))
+            img_b64 = base64.standard_b64encode(img).decode("utf-8")
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": img_b64,
+                },
+            })
 
-        contents = [types.Content(role="user", parts=parts)]
+        content.append({"type": "text", "text": text_prompt})
 
-        config = types.GenerateContentConfig(
-            temperature=self.config.temperature,
-            max_output_tokens=self.config.max_output_tokens,
-        )
+        kwargs: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_output_tokens,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": self.config.temperature,
+        }
+
         if system:
-            config.system_instruction = system
+            if response_format:
+                system += "\n\nYou MUST respond with valid JSON only. No markdown, no explanation."
+            kwargs["system"] = system
+        elif response_format:
+            kwargs["system"] = "You MUST respond with valid JSON only. No markdown, no explanation."
 
-        if response_format:
-            config.response_mime_type = "application/json"
-            config.response_schema = response_format
-
-        response = await asyncio.to_thread(
-            self._client.models.generate_content,
-            model=self.config.model,
-            contents=contents,
-            config=config,
-        )
+        response = await self._client.messages.create(**kwargs)
 
         self._track_usage(response)
-        return response.text or ""
+        return self._extract_text(response)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts.
 
-        Uses the same Gemini model's embedding endpoint.
+        Uses a lightweight local approach since Anthropic doesn't provide
+        an embedding API. Falls back to simple hash-based vectors.
+        This is only used as a fallback — the primary matching uses
+        text overlap, not embeddings.
         """
-        result = await asyncio.to_thread(
-            self._client.models.embed_content,
-            model="gemini-embedding-001",
-            contents=texts,
-        )
-        return [e.values for e in result.embeddings]
+        try:
+            from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+            ef = DefaultEmbeddingFunction()
+            return ef(texts)
+        except Exception:
+            # Fallback: simple character-frequency vectors (768 dims)
+            # This is a last-resort — text matching handles most cases
+            embeddings = []
+            for text in texts:
+                vec = [0.0] * 768
+                for i, ch in enumerate(text.lower()):
+                    idx = ord(ch) % 768
+                    vec[idx] += 1.0 / (1 + i * 0.01)
+                # Normalize
+                norm = sum(v * v for v in vec) ** 0.5
+                if norm > 0:
+                    vec = [v / norm for v in vec]
+                embeddings.append(vec)
+            return embeddings
 
-    def _build_contents(
+    def _extract_text(self, response: Any) -> str:
+        """Extract text from an Anthropic response."""
+        for block in response.content:
+            if block.type == "text":
+                return block.text
+        return ""
+
+    def _merge_consecutive_messages(
         self, messages: list[dict[str, Any]]
-    ) -> list[types.Content]:
-        """Convert message dicts to Gemini Content objects."""
-        contents = []
-        for msg in messages:
-            role = msg.get("role", "user")
-            if role == "assistant":
-                role = "model"
-            text = msg.get("content", "")
-            contents.append(
-                types.Content(
-                    role=role,
-                    parts=[types.Part.from_text(text=text)],
-                )
-            )
-        return contents
+    ) -> list[dict[str, Any]]:
+        """Merge consecutive messages with the same role.
+
+        Anthropic API requires strict alternation of user/assistant roles.
+        """
+        if not messages:
+            return []
+
+        merged = [messages[0].copy()]
+        for msg in messages[1:]:
+            if msg["role"] == merged[-1]["role"]:
+                merged[-1]["content"] += "\n\n" + msg["content"]
+            else:
+                merged.append(msg.copy())
+        return merged
 
     def _track_usage(self, response: Any) -> None:
         """Track token usage from response metadata."""
         self._call_count += 1
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            meta = response.usage_metadata
-            input_tokens = getattr(meta, "prompt_token_count", 0) or 0
-            output_tokens = getattr(meta, "candidates_token_count", 0) or 0
+        if hasattr(response, "usage") and response.usage:
+            input_tokens = getattr(response.usage, "input_tokens", 0) or 0
+            output_tokens = getattr(response.usage, "output_tokens", 0) or 0
             self.total_input_tokens += input_tokens
             self.total_output_tokens += output_tokens
             logger.debug(
@@ -182,7 +220,7 @@ class LLMClient:
 
     @property
     def cost_estimate(self) -> float:
-        """Estimated cost in USD (Gemini 3 Flash pricing)."""
-        input_cost = self.total_input_tokens * 0.10 / 1_000_000
-        output_cost = self.total_output_tokens * 0.40 / 1_000_000
+        """Estimated cost in USD (Claude Sonnet pricing)."""
+        input_cost = self.total_input_tokens * 3.00 / 1_000_000
+        output_cost = self.total_output_tokens * 15.00 / 1_000_000
         return input_cost + output_cost

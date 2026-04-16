@@ -39,6 +39,10 @@ Output EXACTLY ONE JSON action per step:
 - If the task is complete, output {"action": "done", "success": true, "reason": "...", "answer": "..."}
 - If the task asks a question (e.g., "What is...", "How many...", "List the..."), you MUST include the answer in the "answer" field of the done action. Read the exact text from the page — do not describe what you see, return the actual value. For example: {"action": "done", "success": true, "reason": "Found the value", "answer": "$36.39"} NOT {"action": "done", "success": true, "reason": "The total is displayed on screen", "answer": ""}
 - Always extract concrete data values from the screen. If the task asks for a number, name, date, or other specific value, read it from the page and put it in the "answer" field.
+- When reading data tables: carefully read each row and column header. Match the correct column to each value. For multi-column tables, cross-reference the row label/ID with the requested column.
+- For sorting/filtering tasks: after applying filters or sorting, wait for the page to update before reading values.
+- When asked for "the last" or "most recent" item: check the sort order. If sorted by date descending, the first row is the most recent. If sorted ascending, scroll to the bottom.
+- If the answer involves multiple values (e.g., "name and email"), return them together in a natural format like "John Doe, john@example.com"
 - If you're stuck or the task is impossible, output {"action": "done", "success": false, "reason": "..."}
 - Be patient with page loads — use wait actions when needed
 - Scroll down if you can't see the target element

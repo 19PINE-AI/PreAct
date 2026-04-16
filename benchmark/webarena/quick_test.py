@@ -68,7 +68,7 @@ async def test_sidebar_bypass_cua():
         print("  [SKIP] No auth state — run benchmark first")
         return
 
-    llm = LLMClient(LLMConfig(model="gemini-3-flash-preview"))
+    llm = LLMClient(LLMConfig())
     env = BrowserEnvironment(
         headless=True,
         start_url="http://localhost:7780/admin",

@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 class LLMConfig:
     """Configuration for LLM clients."""
 
-    model: str = "gemini-3-flash-preview"
-    api_key: str = field(default_factory=lambda: os.environ.get("GEMINI_API_KEY", ""))
+    model: str = "claude-sonnet-4-6"
+    api_key: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
     temperature: float = 0.0
     max_output_tokens: int = 8192
     timeout_sec: float = 60.0
@@ -42,7 +42,7 @@ class RAGConfig:
 
     persist_dir: str = "rag_db"
     collection_name: str = "rpa_programs"
-    embedding_model: str = "gemini-3-flash-preview"
+    embedding_model: str = "default"
     top_k: int = 3
     similarity_threshold: float = 0.7
 

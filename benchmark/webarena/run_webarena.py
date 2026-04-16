@@ -42,7 +42,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("webarena")
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("anthropic").setLevel(logging.WARNING)
 logging.getLogger("chromadb").setLevel(logging.WARNING)
 logging.getLogger("playwright").setLevel(logging.WARNING)
 
@@ -103,7 +103,7 @@ async def run_task_with_eval(
     task_id = task["task_id"]
     start_url = task["start_url"]
 
-    llm = LLMClient(LLMConfig(model="gemini-3-flash-preview"))
+    llm = LLMClient(LLMConfig())
     env = BrowserEnvironment(
         headless=True,
         start_url=start_url,
