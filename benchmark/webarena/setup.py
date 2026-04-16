@@ -57,14 +57,18 @@ def generate_task_configs(
         # SHOPPING_ADMIN maps to /admin path (the Magento admin panel)
         if site_upper == "SHOPPING_ADMIN":
             url_map[f"__{site_upper}__"] = f"{base}/admin"
+        elif site_upper == "SHOPPING":
+            # Shopping storefront runs on same Magento container as admin
+            admin_port = DEFAULT_PORTS.get("SHOPPING_ADMIN", 7780)
+            url_map[f"__{site_upper}__"] = f"http://{hostname}:{admin_port}"
         else:
             url_map[f"__{site_upper}__"] = base
 
     # Filter tasks by site
-    site_set = set(sites)
+    site_set = set(s.lower() for s in sites)
     filtered = [
         t for t in all_tasks
-        if set(t.get("sites", [])).issubset(site_set)
+        if set(s.lower() for s in t.get("sites", [])).issubset(site_set)
     ]
 
     generated = []
@@ -193,12 +197,15 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         hostname = sys.argv[2] if len(sys.argv) > 2 else "localhost"
+        sites = sys.argv[3].split(",") if len(sys.argv) > 3 else ["shopping_admin"]
         if start_shopping_admin(hostname):
-            generate_task_configs(hostname, ["shopping_admin"])
+            generate_task_configs(hostname, sites)
     elif len(sys.argv) > 1 and sys.argv[1] == "configs":
         hostname = sys.argv[2] if len(sys.argv) > 2 else "localhost"
-        generate_task_configs(hostname, ["shopping_admin"])
+        sites = sys.argv[3].split(",") if len(sys.argv) > 3 else ["shopping_admin"]
+        generate_task_configs(hostname, sites)
     else:
         print("Usage:")
-        print("  python setup.py setup [hostname]  — Start Docker + generate configs")
-        print("  python setup.py configs [hostname] — Generate configs only")
+        print("  python setup.py setup [hostname] [sites]  — Start Docker + generate configs")
+        print("  python setup.py configs [hostname] [sites] — Generate configs only")
+        print("  sites: comma-separated, e.g. shopping_admin,shopping")

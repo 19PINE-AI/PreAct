@@ -68,8 +68,24 @@ Output EXACTLY ONE JSON action per step:
   - Reviews > All Reviews: navigate to "/admin/review/product/index/"
   For example, if the current URL is http://hostname:port/admin, navigate to http://hostname:port/admin/sales/order/
   Use the same hostname and port visible in the current page URL.
+- On Magento Admin grid pages (Customers, Orders, etc.), if you need to search/filter:
+  1. First look for and click the "Filters" button (xpath: //button[@data-action='grid-filter-expand']) to expand the filter panel
+  2. Then type into the appropriate filter field (e.g., //input[@name='billing_telephone'], //input[@name='name'])
+  3. Then click the "Apply Filters" button (xpath: //button[@data-action='grid-filter-apply']) to apply the search
+  4. The grid will update to show matching results
+  - IMPORTANT: Use the xpaths from the "Interactive elements" list when available — do NOT guess element IDs
+  - IMPORTANT: Button text is often inside a <span>, so //button[contains(text(),'...')] may fail. Use @data-action or @title attributes instead
 - When working in an admin panel (e.g., Magento Admin), use direct URL navigation and admin reports rather than browsing the customer-facing storefront
-- Focus on finding exact data from admin reports and database views, not estimating or guessing"""
+- Focus on finding exact data from admin reports and database views, not estimating or guessing
+- For Magento Storefront (customer-facing shopping site), you are ALREADY LOGGED IN. Do NOT try to log in again. Use the "navigate" action to go directly to pages:
+  - My Account: navigate to the current hostname + "/customer/account/"
+  - My Orders: navigate to the current hostname + "/sales/order/history/"
+  - My Wishlist: navigate to the current hostname + "/wishlist/"
+  - To search: use the search box at the top of the page
+  - To view an order: click the "View Order" link from My Orders
+  - When looking at order details, the order total, status, and items are all visible on the order view page
+- When you see a Magento storefront page, do NOT try to log in or click "Sign In" — you are already authenticated
+- Use the "navigate" action with full URLs (including hostname and port) rather than clicking menu links"""
 
 USER_PROMPT = """Task: {task}
 

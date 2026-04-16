@@ -183,7 +183,7 @@ class BrowserEnvironment:
     async def click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
         try:
-            await locator.click(timeout=10000)
+            await locator.click(timeout=5000)
         except Exception as e:
             if "not visible" in str(e).lower():
                 # Fallback: JS click for hidden elements (e.g. collapsed sidebar menus)
@@ -194,11 +194,11 @@ class BrowserEnvironment:
 
     async def double_click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
-        await locator.dblclick(timeout=10000)
+        await locator.dblclick(timeout=5000)
 
     async def right_click(self, xpath: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first
-        await locator.click(button="right", timeout=10000)
+        await locator.click(button="right", timeout=5000)
 
     async def type_text(self, xpath: str, text: str) -> None:
         locator = self.page.locator(f"xpath={xpath}").first

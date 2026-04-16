@@ -23,7 +23,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from benchmark.webarena.auth import capture_shopping_admin_auth, get_auth_state_path
+from benchmark.webarena.auth import (
+    capture_shopping_admin_auth,
+    capture_shopping_auth,
+    get_auth_state_path,
+)
 from benchmark.webarena.evaluator import evaluate_webarena_task
 from benchmark.webarena.setup import generate_task_configs, start_shopping_admin
 from preact.baselines.base import BaselineResult
@@ -71,7 +75,9 @@ def load_webarena_tasks(
 
     if not config_dir.exists() or not list(config_dir.glob("*.json")):
         logger.info("No task configs found, generating from raw...")
-        generate_task_configs(HOSTNAME, ["shopping_admin"], str(config_dir))
+        generate_task_configs(
+            HOSTNAME, ["shopping_admin", "shopping"], str(config_dir)
+        )
 
     tasks = []
     for config_path in sorted(config_dir.glob("*.json")):
@@ -96,12 +102,21 @@ async def run_task_with_eval(
     system: object,
     task: dict,
     run_type: str,
-    auth_state: str | None = None,
+    auth_states: dict[str, str | None] | None = None,
     timeout: int = 180,
 ) -> dict:
     """Run a single WebArena task and evaluate the result."""
     task_id = task["task_id"]
     start_url = task["start_url"]
+
+    # Pick correct auth state based on task's storage_state field
+    auth_state = None
+    if auth_states:
+        task_storage = task.get("storage_state", "")
+        if "shopping_admin" in task_storage:
+            auth_state = auth_states.get("shopping_admin")
+        elif "shopping" in task_storage:
+            auth_state = auth_states.get("shopping")
 
     llm = LLMClient(LLMConfig())
     env = BrowserEnvironment(
@@ -183,7 +198,7 @@ async def run_system_benchmark(
     system_name: str,
     system: object,
     tasks: list[dict],
-    auth_state: str | None = None,
+    auth_states: dict[str, str | None] | None = None,
     timeout: int = 180,
 ) -> dict:
     """Run full benchmark for one system on WebArena tasks."""
@@ -205,7 +220,7 @@ async def run_system_benchmark(
         )
 
         r1 = await run_task_with_eval(
-            system, task, "exploration", auth_state, timeout
+            system, task, "exploration", auth_states, timeout
         )
         run1_results.append(r1)
 
@@ -237,7 +252,7 @@ async def run_system_benchmark(
 
         logger.info("  [%s] Run 2 (replay):", tid)
         r2 = await run_task_with_eval(
-            system, task, "replay", auth_state, timeout
+            system, task, "replay", auth_states, timeout
         )
         run2_results.append(r2)
 
@@ -405,20 +420,33 @@ async def main():
             logger.error("Failed to start shopping_admin container")
             sys.exit(1)
 
-    # ---- Capture auth state ----
-    auth_state_path = get_auth_state_path("shopping_admin")
-    if not auth_state_path:
+    # ---- Capture auth states ----
+    auth_states: dict[str, str | None] = {}
+
+    # Shopping admin auth
+    admin_state = get_auth_state_path("shopping_admin")
+    if not admin_state:
         logger.info("Capturing auth state for shopping_admin...")
-        auth_state_path = await capture_shopping_admin_auth(
+        admin_state = await capture_shopping_admin_auth(
             HOSTNAME, SHOPPING_ADMIN_PORT
         )
-    auth_state = str(auth_state_path) if auth_state_path else None
-    logger.info("Auth state: %s", auth_state)
+    auth_states["shopping_admin"] = str(admin_state) if admin_state else None
+
+    # Shopping customer auth
+    shopping_state = get_auth_state_path("shopping")
+    if not shopping_state:
+        logger.info("Capturing auth state for shopping...")
+        shopping_state = await capture_shopping_auth(HOSTNAME, SHOPPING_ADMIN_PORT)
+    auth_states["shopping"] = str(shopping_state) if shopping_state else None
+
+    logger.info("Auth states: %s", auth_states)
 
     # ---- Generate task configs ----
     config_dir = Path(__file__).parent / "configs"
     if not config_dir.exists() or not list(config_dir.glob("*.json")):
-        generate_task_configs(HOSTNAME, ["shopping_admin"], str(config_dir))
+        generate_task_configs(
+            HOSTNAME, ["shopping_admin", "shopping"], str(config_dir)
+        )
 
     # ---- Load tasks ----
     tasks = load_webarena_tasks(
@@ -460,7 +488,7 @@ async def main():
                 shutil.rmtree(d)
 
         result = await run_system_benchmark(
-            display_name, system, tasks, auth_state, args.timeout
+            display_name, system, tasks, auth_states, args.timeout
         )
         all_results[display_name] = result
 

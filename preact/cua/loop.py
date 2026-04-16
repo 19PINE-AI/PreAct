@@ -149,6 +149,20 @@ class CUALoop:
                     system = system.replace(
                         '"/admin/', f'"{base_url}/admin/'
                     )
+                    # Tell agent the current base URL and context
+                    is_admin = "/admin" in current_url
+                    system += (
+                        f"\n\nCurrent page URL: {current_url}\n"
+                        f"Base URL for this site: {base_url}\n"
+                        f"When using navigate actions, ALWAYS use this base URL: {base_url}"
+                    )
+                    if not is_admin:
+                        system += (
+                            "\n\nIMPORTANT: You are on the CUSTOMER STOREFRONT (not admin). "
+                            "Do NOT navigate to /admin pages. Stay on the storefront. "
+                            "You are logged in as a customer. Use customer pages like "
+                            f"{base_url}/sales/order/history/ for order history."
+                        )
                 except Exception:
                     pass
 
@@ -294,6 +308,11 @@ class CUALoop:
                     fallback_system = fallback_system.replace(
                         '"/admin/', f'"{base_url}/admin/'
                     )
+                    fallback_system += (
+                        f"\n\nCurrent page URL: {current_url}\n"
+                        f"Base URL for this site: {base_url}\n"
+                        f"When using navigate actions, ALWAYS use this base URL: {base_url}"
+                    )
                 except Exception:
                     pass
 
@@ -406,7 +425,7 @@ class CUALoop:
                 await self.env.double_click(action.target)
 
         elif t == ActionType.ACTION_TYPE:
-            if action.target and action.text:
+            if action.target and action.text is not None:
                 try:
                     await self.env.type_text(action.target, action.text)
                 except Exception:
@@ -441,6 +460,14 @@ class CUALoop:
         elif t == ActionType.ACTION_NAVIGATE:
             if action.text:
                 await self.env.navigate(action.text)
+                # Wait for page to fully load after navigation
+                try:
+                    await self.env.page.wait_for_load_state(
+                        "networkidle", timeout=8000
+                    )
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
 
         else:
             logger.warning("Unhandled action type in CUA: %s", t)
@@ -453,6 +480,7 @@ class CUALoop:
         """
         elements = await self.env.evaluate_js("""() => {
             const results = [];
+            const seen = new Set();
             const selectors = [
                 'input[type=text]:not([type=hidden])',
                 'input[type=search]',
@@ -462,9 +490,24 @@ class CUALoop:
                 'a[href]',
                 'textarea',
             ];
+            // Detect auto-generated IDs (short random alphanumeric)
+            function isStableId(id) {
+                if (!id) return false;
+                // IDs like 'HCCSWUC', 'PW44JXK' are auto-generated
+                if (/^[A-Z0-9]{5,10}$/.test(id)) return false;
+                // IDs like 'idscheck25' are auto-generated checkboxes
+                if (/^idscheck/.test(id)) return false;
+                // Stable IDs: search-global, fulltext, username, add, etc.
+                return true;
+            }
             for (const sel of selectors) {
                 for (const el of document.querySelectorAll(sel)) {
-                    if (el.offsetParent === null && el.tagName !== 'INPUT') continue;
+                    // Check actual visibility: element and ancestors must be visible
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    if (rect.width === 0 && rect.height === 0) continue;
+                    if (style.display === 'none' || style.visibility === 'hidden') continue;
+                    if (el.offsetParent === null && style.position !== 'fixed') continue;
                     const tag = el.tagName.toLowerCase();
                     const id = el.id;
                     const name = el.name;
@@ -473,21 +516,29 @@ class CUALoop:
                     const label = el.getAttribute('aria-label') || '';
                     const title = el.title || '';
                     let xpath = '';
-                    if (id) {
-                        xpath = `//*[@id='${id}']`;
-                    } else if (name) {
-                        xpath = `//${tag}[@name='${name}']`;
+                    const dataAction = el.getAttribute('data-action') || '';
+                    // Prefer stable attributes: name > stable ID > data-action > placeholder > label
+                    if (name) {
+                        xpath = '//' + tag + '[@name=\\'' + name + '\\']';
+                    } else if (isStableId(id)) {
+                        xpath = '//*[@id=\\'' + id + '\\']';
+                    } else if (dataAction) {
+                        xpath = '//' + tag + '[@data-action=\\'' + dataAction + '\\']';
                     } else if (ph) {
-                        xpath = `//${tag}[@placeholder='${ph}']`;
+                        xpath = '//' + tag + '[@placeholder=\\'' + ph + '\\']';
                     } else if (label) {
-                        xpath = `//${tag}[@aria-label='${label}']`;
+                        xpath = '//' + tag + '[@aria-label=\\'' + label + '\\']';
+                    } else if (id) {
+                        xpath = '//*[@id=\\'' + id + '\\']';
                     } else if (text && tag !== 'a') {
-                        xpath = `//${tag}[contains(text(),'${text.slice(0,25)}')]`;
+                        xpath = '//' + tag + '[normalize-space()=\\'' + text.slice(0,25) + '\\']';
                     }
-                    if (!xpath) continue;
+                    if (!xpath || seen.has(xpath)) continue;
+                    seen.add(xpath);
                     const desc = [tag];
-                    if (id) desc.push('id=' + id);
                     if (name) desc.push('name=' + name);
+                    if (isStableId(id)) desc.push('id=' + id);
+                    if (dataAction) desc.push('data-action=' + dataAction);
                     if (ph) desc.push('placeholder=' + ph);
                     if (text && tag !== 'input') desc.push('"' + text.slice(0,30) + '"');
                     results.push(xpath + ' (' + desc.join(', ') + ')');
