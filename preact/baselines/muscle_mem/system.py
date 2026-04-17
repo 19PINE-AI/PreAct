@@ -95,6 +95,7 @@ class MuscleMemBaseline:
         actions_executed = 0
         success = False
         error = None
+        cua_result = None
 
         try:
             # Wait for page to be ready before blind replay
@@ -122,6 +123,12 @@ class MuscleMemBaseline:
 
         replay_time = (time.monotonic() - start) * 1000
 
+        # Extract answer from fallback CUA (regardless of success flag,
+        # since success=True when CUA fallback solved it)
+        answer = ""
+        if cua_result and cua_result.answer:
+            answer = cua_result.answer
+
         return BaselineResult(
             success=success,
             mode="replay",
@@ -133,6 +140,7 @@ class MuscleMemBaseline:
             actions_via_llm=0 if success else actions_executed,
             fallback_count=0 if success else 1,
             error=error,
+            extra={"answer": answer},
         )
 
     async def _execute_action(

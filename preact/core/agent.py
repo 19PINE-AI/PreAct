@@ -177,22 +177,47 @@ class PreActAgent:
             result.success = True
             result.execution_result = exec_result
 
-            # For information retrieval tasks, extract the answer from screen
+            # For information retrieval tasks, extract the answer
             if self._is_info_retrieval_task(task):
-                # Wait for page to fully render after RPA replay
-                # RPA executes actions back-to-back with no natural delay,
-                # so data may not be visible yet when terminal state is reached
-                try:
-                    await self.env.page.wait_for_load_state(
-                        "networkidle", timeout=5000
-                    )
-                except Exception:
-                    pass
-                # Additional settle time for dynamic content (Magento tables, etc.)
-                import asyncio
-                await asyncio.sleep(2)
+                answer = ""
 
-                answer = await self._extract_answer_from_screen(task)
+                # Prefer answer from inspect_text data (stored during RPA execution)
+                if exec_result.data:
+                    # Look for common answer keys
+                    for key in ("answer", "result", "extracted_answer"):
+                        if key in exec_result.data:
+                            answer = str(exec_result.data[key])
+                            break
+                    # Fall back to last non-boolean string value
+                    # (evaluate_condition stores bools — skip those)
+                    if not answer:
+                        for val in reversed(list(exec_result.data.values())):
+                            if isinstance(val, bool):
+                                continue
+                            s = str(val).strip()
+                            if s and s.lower() not in ("true", "false", "none"):
+                                answer = s
+                                break
+
+                if answer:
+                    logger.info("Answer from RPA data: %s", answer[:100])
+                    answer = self._clean_answer(answer)
+
+                # Fallback: extract from screenshot if no data from RPA
+                if not answer:
+                    import asyncio
+                    logger.info("No answer in RPA data, extracting from screenshot")
+                    try:
+                        await self.env.page.wait_for_load_state(
+                            "networkidle", timeout=5000
+                        )
+                    except Exception:
+                        pass
+                    await asyncio.sleep(2)
+                    answer = await self._extract_answer_from_screen(task)
+                    if answer:
+                        answer = self._clean_answer(answer)
+
                 if answer:
                     result.cua_result = CUAResult(
                         success=True,
@@ -207,11 +232,14 @@ class PreActAgent:
         if exec_result.error and (
             exec_result.error.startswith("state_verification_failed:")
             or exec_result.error.startswith("action_failed:")
+            or exec_result.error.startswith("max_iterations_exceeded:")
         ):
             logger.info("RPA failed, falling back to CUA")
             result.mode = "hybrid"
 
-            failed_state = exec_result.error.split(":")[-1]
+            # Error format: "state_verification_failed:state_id" or "action_failed:state_id:exception_msg"
+            parts = exec_result.error.split(":", 2)
+            failed_state = parts[1] if len(parts) > 1 else parts[0]
 
             # Run CUA from current context
             cua_result = await self.cua.run_from_context(
@@ -449,15 +477,70 @@ class PreActAgent:
 
     @staticmethod
     def _is_info_retrieval_task(task: str) -> bool:
-        """Check if task requires extracting information from the screen."""
+        """Check if task requires extracting information from the screen.
+
+        Broadly matches any task that needs a text answer returned,
+        including Q&A, lookup, search, comparison, and summary tasks.
+        """
         lower = task.lower()
         patterns = [
             "what is", "what are", "how many", "how much",
             "tell me", "show me", "list the", "list all",
             "give me", "find the", "which", "who",
             "present", "count", "total", "number of",
+            "get the", "compare", "provide", "summarize",
+            "identify", "determine", "check the", "check if",
+            "name of", "address of", "email of", "phone",
+            "most recent", "latest", "oldest", "newest",
+            "top ", "bottom ", "highest", "lowest",
+            "view", "retrieve", "fetch", "lookup", "display",
+            "read", "extract", "report", "query",
         ]
         return any(p in lower for p in patterns)
+
+    @staticmethod
+    def _clean_answer(answer: str) -> str:
+        """Clean verbose LLM answers down to the raw value.
+
+        inspect_text sometimes returns explanations like:
+        'Based on the extracted text, the answer is **hollister**'
+        This strips the fluff and returns 'hollister'.
+        """
+        import re
+
+        # Strip markdown bold/italic
+        cleaned = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", answer)
+
+        # If the answer starts with explanation phrases, extract the value after them
+        explanation_prefixes = [
+            r"^based on (?:the )?(?:extracted |available )?(?:text|data|information|content|screenshot|image),?\s*",
+            r"^(?:the |from the )(?:extracted |available )?(?:text|data|table|page|screenshot|image) (?:shows|indicates|contains|reveals),?\s*",
+            r"^according to (?:the )?(?:extracted |available )?(?:text|data|screenshot|image),?\s*",
+            r"^(?:i can see|looking at|from) (?:the )?(?:screenshot|image|page|text|data),?\s*",
+            r"^(?:in|on) (?:the )?(?:screenshot|image|page),?\s*",
+            r"^here (?:is|are) (?:the )?(?:answer|result|value|values|extracted)s?\s*:?\s*",
+        ]
+        for prefix in explanation_prefixes:
+            cleaned = re.sub(prefix, "", cleaned, flags=re.IGNORECASE)
+
+        # Strip leading "the answer is:" / "the value is:" patterns
+        cleaned = re.sub(
+            r"^(?:the )?(?:answer|result|value|total|name|email|data|output) (?:is|are|was|=)\s*:?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+        # Strip surrounding quotes if present
+        cleaned = cleaned.strip()
+        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ("'", '"', "`"):
+            cleaned = cleaned[1:-1]
+
+        # Drop trailing period if the string is a single short value (not a sentence)
+        if cleaned.endswith(".") and cleaned.count(".") == 1 and " " not in cleaned[-8:]:
+            cleaned = cleaned[:-1]
+
+        return cleaned.strip()
 
     async def _extract_answer_from_screen(self, task: str) -> str:
         """Take a screenshot and extract the answer using vision LLM."""
@@ -480,6 +563,7 @@ class PreActAgent:
             response = await self.llm.complete_with_vision(
                 text_prompt=prompt,
                 images=[screenshot],
+                thinking_budget=4096,
             )
             answer = response.strip().strip('"').strip("'")
             # Filter out non-answers

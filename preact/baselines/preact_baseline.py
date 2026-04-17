@@ -105,10 +105,26 @@ class PreActBaseline:
         if result.cua_result:
             actions_cua = result.cua_result.actions_taken
 
-        # Extract answer: prefer CUA answer (from fallback), as RPA can't extract text
+        # Extract answer: agent populates cua_result.answer from RPA inspect_text data
+        # when RPA succeeds (via answer key or fallback screenshot). If that's empty,
+        # scan execution_result.data directly as a last resort.
         answer = ""
         if result.cua_result and result.cua_result.answer:
             answer = result.cua_result.answer
+        elif result.execution_result and result.execution_result.data:
+            data = result.execution_result.data
+            for key in ("answer", "result", "extracted_answer"):
+                if key in data and data[key]:
+                    answer = str(data[key])
+                    break
+            if not answer:
+                for val in reversed(list(data.values())):
+                    if isinstance(val, bool):
+                        continue
+                    s = str(val).strip()
+                    if s and s.lower() not in ("true", "false", "none"):
+                        answer = s
+                        break
 
         return BaselineResult(
             success=result.success,
