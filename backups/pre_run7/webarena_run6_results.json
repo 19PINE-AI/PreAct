@@ -1,0 +1,1935 @@
+{
+  "Standard CUA": {
+    "system": "Standard CUA",
+    "task_count": 31,
+    "run1": {
+      "eval_sr": 0.41935483870967744,
+      "exec_sr": 0.6129032258064516,
+      "mean_time_ms": 54740.411261847665,
+      "mean_tokens": 55010.25806451613,
+      "per_task": [
+        {
+          "task_id": 11,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"disappointed\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 15963.475422933698,
+          "tokens": 17285,
+          "actions": 3,
+          "coverage": 0.0,
+          "answer": "6",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 12,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"satisfied\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 114241.43601488322,
+          "tokens": 140986,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 13,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"decent\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 21955.058535560966,
+          "tokens": 21796,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 14,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"not useful\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 21711.94820664823,
+          "tokens": 21516,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "0",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 15,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"best\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 19987.684876658022,
+          "tokens": 21708,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 41,
+          "run_type": "exploration",
+          "intent": "List the top 1 search terms in my store",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 29861.95378564298,
+          "tokens": 25795,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "hollister",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 42,
+          "run_type": "exploration",
+          "intent": "List the top 2 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 28573.308280669153,
+          "tokens": 25793,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "1. hollister (21 uses)\n2. best selling products 2022 (16 uses)",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 43,
+          "run_type": "exploration",
+          "intent": "List the top 3 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 22789.60034623742,
+          "tokens": 21114,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "1. hollister (21 uses), 2. best selling products 2022 (16 uses), 3. best sellers 2022 (11 uses)",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 77,
+          "run_type": "exploration",
+          "intent": "What is the total count of Pending reviews amongst all the reviews?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 79041.90043453127,
+          "tokens": 17071,
+          "actions": 3,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 78,
+          "run_type": "exploration",
+          "intent": "What is the total count of Approved reviews amongst all the reviews?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 80279.53781653196,
+          "tokens": 17061,
+          "actions": 3,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 79,
+          "run_type": "exploration",
+          "intent": "What is the total count of Not Approved reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 180000,
+          "tokens": 35726,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "timeout_180s"
+        },
+        {
+          "task_id": 94,
+          "run_type": "exploration",
+          "intent": "Telll me the grand total of invoice 000000001.",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 8168.481516651809,
+          "tokens": 7464,
+          "actions": 1,
+          "coverage": 0.0,
+          "answer": "$36.39",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 95,
+          "run_type": "exploration",
+          "intent": "Telll me the grand total of invoice 000000002.",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 7476.069547235966,
+          "tokens": 7464,
+          "actions": 1,
+          "coverage": 0.0,
+          "answer": "$39.64",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 127,
+          "run_type": "exploration",
+          "intent": "What brands appear most frequently among the top search terms?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 90932.03170131892,
+          "tokens": 130979,
+          "actions": 26,
+          "coverage": 0.0,
+          "answer": "Hollister appears most frequently among the top search terms, with 21 uses. Other top terms include 'best selling products 2022' (16 uses) and 'best sellers 2022' (11 uses), which are not brand names but product category searches.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 195,
+          "run_type": "exploration",
+          "intent": "Get the total payment amount of the last 5 pending orders",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 102333.9545223862,
+          "tokens": 85139,
+          "actions": 19,
+          "coverage": 0.0,
+          "answer": "The page shows all 10 pending orders sorted by Purchase Date ascending. The last 5 pending orders (most recent) are visible. From the screenshot, I can see orders 000000302 ($183.50) and 000000301 ($76.40) at the bottom. I need to identify the last 5 orders by date. The page is sorted ascending, so the last 5 are the bottom 5 rows. From previous scrolling, the orders visible include: 000000302 ($183.50), 000000301 ($76.40), and I need to recall the other 3. Based on the data seen: the 5 most recent pending orders have grand totals that need to be summed. From the full list seen during scrolling - the last 5 orders (most recent dates) appear to be orders with amounts $183.50, $76.40, and 3 others. Without being able to see all rows simultaneously, I'll calculate based on what was visible: The 10 pending orders total needs the last 5. The two visible are $183.50 + $76.40 = $259.90. I need to scroll up to see the other orders to identify the last 5.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 196,
+          "run_type": "exploration",
+          "intent": "Compare the payment difference of the last 4 cancelled orders and completed orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 97805.36678340286,
+          "tokens": 124144,
+          "actions": 29,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 197,
+          "run_type": "exploration",
+          "intent": "Get the total payment amount of the last 5 non-cancelled orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 89044.60312705487,
+          "tokens": 130546,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 198,
+          "run_type": "exploration",
+          "intent": "Get the customer name of the most recent cancelled order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 11922.992952167988,
+          "tokens": 7580,
+          "actions": 1,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 199,
+          "run_type": "exploration",
+          "intent": "Get the order ID of the newest pending order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 23682.622781023383,
+          "tokens": 27609,
+          "actions": 6,
+          "coverage": 0.0,
+          "answer": "000000299",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 200,
+          "run_type": "exploration",
+          "intent": "Get the billing name of the oldest complete order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 43590.14686662704,
+          "tokens": 51478,
+          "actions": 12,
+          "coverage": 0.0,
+          "answer": "John Lee",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 201,
+          "run_type": "exploration",
+          "intent": "Get the customer name of the earliest fraud suspect order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 85809.3090346083,
+          "tokens": 130396,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 203,
+          "run_type": "exploration",
+          "intent": "Get the purchase date and order id of the most recent pending order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 24051.185239106417,
+          "tokens": 23681,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Order ID: 000000299, Purchase Date: May 31, 2023 2:55:09 AM",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 208,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number +1 2058812302",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 14959.617699496448,
+          "tokens": 19600,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "No customer found with phone number +1 2058812302",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 209,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 2137418080",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 18596.499606966972,
+          "tokens": 23503,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Jennifer White, jennifer.white@yahoo.com",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 210,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 2065555555",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 17662.972605787218,
+          "tokens": 23526,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Name: Adam Garcia, Email: gamingpro456@gmail.com",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 211,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 8015551212",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 17570.120020769536,
+          "tokens": 23520,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Sean Miller, sean.miller@gmail.com",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 212,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 555-229-3326",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 17432.642307132483,
+          "tokens": 23534,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "No customer found with phone number 555-229-3326",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 289,
+          "run_type": "exploration",
+          "intent": "Tell me the email address, name, phone number of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 152085.7783695683,
+          "tokens": 122709,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 290,
+          "run_type": "exploration",
+          "intent": "Tell me the product SKUs in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 89044.8843203485,
+          "tokens": 122274,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 291,
+          "run_type": "exploration",
+          "intent": "Tell me the total spend on products in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 79087.75357529521,
+          "tokens": 123565,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 491,
+          "run_type": "exploration",
+          "intent": "Notify Sarah Miller in their most recent pending order with message \"the order is ready to be shipped soon!\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 91289.81282003224,
+          "tokens": 130756,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        }
+      ]
+    },
+    "run2": {
+      "eval_sr": 0.0,
+      "exec_sr": 0.0,
+      "mean_time_ms": 0.0,
+      "mean_tokens": 0.0,
+      "mean_coverage": 0.0,
+      "per_task": [
+        {
+          "task_id": 11,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"disappointed\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 12,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"satisfied\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 13,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"decent\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 14,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"not useful\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 15,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"best\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 41,
+          "run_type": "replay",
+          "intent": "List the top 1 search terms in my store",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 42,
+          "run_type": "replay",
+          "intent": "List the top 2 search terms in my store",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 43,
+          "run_type": "replay",
+          "intent": "List the top 3 search terms in my store",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 77,
+          "run_type": "replay",
+          "intent": "What is the total count of Pending reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 78,
+          "run_type": "replay",
+          "intent": "What is the total count of Approved reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 79,
+          "run_type": "replay",
+          "intent": "What is the total count of Not Approved reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 94,
+          "run_type": "replay",
+          "intent": "Telll me the grand total of invoice 000000001.",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 95,
+          "run_type": "replay",
+          "intent": "Telll me the grand total of invoice 000000002.",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 127,
+          "run_type": "replay",
+          "intent": "What brands appear most frequently among the top search terms?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 195,
+          "run_type": "replay",
+          "intent": "Get the total payment amount of the last 5 pending orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 196,
+          "run_type": "replay",
+          "intent": "Compare the payment difference of the last 4 cancelled orders and completed orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 197,
+          "run_type": "replay",
+          "intent": "Get the total payment amount of the last 5 non-cancelled orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 198,
+          "run_type": "replay",
+          "intent": "Get the customer name of the most recent cancelled order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 199,
+          "run_type": "replay",
+          "intent": "Get the order ID of the newest pending order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 200,
+          "run_type": "replay",
+          "intent": "Get the billing name of the oldest complete order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 201,
+          "run_type": "replay",
+          "intent": "Get the customer name of the earliest fraud suspect order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 203,
+          "run_type": "replay",
+          "intent": "Get the purchase date and order id of the most recent pending order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 208,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number +1 2058812302",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 209,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 2137418080",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 210,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 2065555555",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 211,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 8015551212",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 212,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 555-229-3326",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 289,
+          "run_type": "replay",
+          "intent": "Tell me the email address, name, phone number of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 290,
+          "run_type": "replay",
+          "intent": "Tell me the product SKUs in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 291,
+          "run_type": "replay",
+          "intent": "Tell me the total spend on products in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 491,
+          "run_type": "replay",
+          "intent": "Notify Sarah Miller in their most recent pending order with message \"the order is ready to be shipped soon!\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        }
+      ]
+    },
+    "mean_speedup": 0,
+    "speedups": [],
+    "eval_type_breakdown": {
+      "string_match": {
+        "pass": 13,
+        "total": 31
+      }
+    }
+  },
+  "PreAct": {
+    "system": "PreAct",
+    "task_count": 31,
+    "run1": {
+      "eval_sr": 0.41935483870967744,
+      "exec_sr": 0.6129032258064516,
+      "mean_time_ms": 64669.77241470088,
+      "mean_tokens": 57812.645161290326,
+      "per_task": [
+        {
+          "task_id": 11,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"disappointed\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 29246.56707420945,
+          "tokens": 24798,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "6",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 12,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"satisfied\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 27929.07178401947,
+          "tokens": 21723,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 13,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"decent\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 100880.17803803086,
+          "tokens": 138683,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 14,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"not useful\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 28863.27983252704,
+          "tokens": 21440,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "0",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 15,
+          "run_type": "exploration",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"best\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 26250.873380340636,
+          "tokens": 17237,
+          "actions": 3,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 41,
+          "run_type": "exploration",
+          "intent": "List the top 1 search terms in my store",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 38376.578017137945,
+          "tokens": 25775,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "hollister",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 42,
+          "run_type": "exploration",
+          "intent": "List the top 2 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 35970.60769237578,
+          "tokens": 25742,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "1. hollister (21 uses)\n2. best selling products 2022 (16 uses)",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 43,
+          "run_type": "exploration",
+          "intent": "List the top 3 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 29678.470152430236,
+          "tokens": 21068,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "1. hollister (21 uses)\n2. best selling products 2022 (16 uses)\n3. best sellers 2022 (11 uses)",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 77,
+          "run_type": "exploration",
+          "intent": "What is the total count of Pending reviews amongst all the reviews?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 93011.48281246424,
+          "tokens": 17080,
+          "actions": 3,
+          "coverage": 0.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 78,
+          "run_type": "exploration",
+          "intent": "What is the total count of Approved reviews amongst all the reviews?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 96167.55159012973,
+          "tokens": 21896,
+          "actions": 4,
+          "coverage": 0.0,
+          "answer": "351",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 79,
+          "run_type": "exploration",
+          "intent": "What is the total count of Not Approved reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 180000,
+          "tokens": 36092,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "timeout_180s"
+        },
+        {
+          "task_id": 94,
+          "run_type": "exploration",
+          "intent": "Telll me the grand total of invoice 000000001.",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 19879.573500715196,
+          "tokens": 7464,
+          "actions": 1,
+          "coverage": 0.0,
+          "answer": "$36.39",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 95,
+          "run_type": "exploration",
+          "intent": "Telll me the grand total of invoice 000000002.",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 16200.40347520262,
+          "tokens": 7464,
+          "actions": 1,
+          "coverage": 0.0,
+          "answer": "$39.64",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 127,
+          "run_type": "exploration",
+          "intent": "What brands appear most frequently among the top search terms?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 94672.48582746834,
+          "tokens": 136078,
+          "actions": 28,
+          "coverage": 0.0,
+          "answer": "Nike and Hollister appear most frequently as brand-specific search terms among the top search terms.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 195,
+          "run_type": "exploration",
+          "intent": "Get the total payment amount of the last 5 pending orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 155627.8113508597,
+          "tokens": 124713,
+          "actions": 27,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 196,
+          "run_type": "exploration",
+          "intent": "Compare the payment difference of the last 4 cancelled orders and completed orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 114605.1939977333,
+          "tokens": 124286,
+          "actions": 28,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 197,
+          "run_type": "exploration",
+          "intent": "Get the total payment amount of the last 5 non-cancelled orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 115540.24207778275,
+          "tokens": 127423,
+          "actions": 29,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 198,
+          "run_type": "exploration",
+          "intent": "Get the customer name of the most recent cancelled order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 47975.12223664671,
+          "tokens": 31882,
+          "actions": 7,
+          "coverage": 0.0,
+          "answer": "Lily Potter",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 199,
+          "run_type": "exploration",
+          "intent": "Get the order ID of the newest pending order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 35154.58421688527,
+          "tokens": 27571,
+          "actions": 6,
+          "coverage": 0.0,
+          "answer": "000000299",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 200,
+          "run_type": "exploration",
+          "intent": "Get the billing name of the oldest complete order",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 95316.88567250967,
+          "tokens": 56690,
+          "actions": 9,
+          "coverage": 0.0,
+          "answer": "Ava Brown",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 201,
+          "run_type": "exploration",
+          "intent": "Get the customer name of the earliest fraud suspect order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 86872.18289636075,
+          "tokens": 130396,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 203,
+          "run_type": "exploration",
+          "intent": "Get the purchase date and order id of the most recent pending order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 43254.57121990621,
+          "tokens": 31753,
+          "actions": 7,
+          "coverage": 0.0,
+          "answer": "Order ID: 000000299, Purchase Date: May 31, 2023 2:55:09 AM",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 208,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number +1 2058812302",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 19925.01632962376,
+          "tokens": 23516,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "No customer found with phone number +1 2058812302",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 209,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 2137418080",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 36405.861815437675,
+          "tokens": 23503,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Jennifer White, jennifer.white@yahoo.com",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 210,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 2065555555",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 32306.972631253302,
+          "tokens": 23526,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Name: Adam Garcia, Email: gamingpro456@gmail.com",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 211,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 8015551212",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 30224.44649413228,
+          "tokens": 23524,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "Name: Sean Miller, Email: sean.miller@gmail.com",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 212,
+          "run_type": "exploration",
+          "intent": "Find the customer name and email with phone number 555-229-3326",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 18139.713153243065,
+          "tokens": 23534,
+          "actions": 5,
+          "coverage": 0.0,
+          "answer": "No customer found with phone number 555-229-3326",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 289,
+          "run_type": "exploration",
+          "intent": "Tell me the email address, name, phone number of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 95314.78198245168,
+          "tokens": 122550,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 290,
+          "run_type": "exploration",
+          "intent": "Tell me the product SKUs in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 83906.65397047997,
+          "tokens": 122123,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 291,
+          "run_type": "exploration",
+          "intent": "Tell me the total spend on products in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 93945.9451334551,
+          "tokens": 121906,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 491,
+          "run_type": "exploration",
+          "intent": "Notify Sarah Miller in their most recent pending order with message \"the order is ready to be shipped soon!\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 83119.83649991453,
+          "tokens": 130756,
+          "actions": 30,
+          "coverage": 0.0,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        }
+      ]
+    },
+    "run2": {
+      "eval_sr": 0.2903225806451613,
+      "exec_sr": 0.5806451612903226,
+      "mean_time_ms": 42308.55891517093,
+      "mean_tokens": 10958.354838709678,
+      "mean_coverage": 0.6059719190449242,
+      "per_task": [
+        {
+          "task_id": 11,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"disappointed\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 38299.093830399215,
+          "tokens": 3407,
+          "actions": 3,
+          "coverage": 1.0,
+          "answer": "6",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 12,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"satisfied\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 18846.43772058189,
+          "tokens": 3492,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 13,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"decent\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 18293.439462780952,
+          "tokens": 3492,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 14,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"not useful\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 95917.81134530902,
+          "tokens": 57123,
+          "actions": 14,
+          "coverage": 0.2857142857142857,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 15,
+          "run_type": "replay",
+          "intent": "Tell me the the number of reviews that our store received by far that mention term \"best\"",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 33605.88452219963,
+          "tokens": 3489,
+          "actions": 3,
+          "coverage": 1.0,
+          "answer": "2",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 41,
+          "run_type": "replay",
+          "intent": "List the top 1 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 3022.3176134750247,
+          "tokens": 93,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "hollister, 1",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 42,
+          "run_type": "replay",
+          "intent": "List the top 2 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 3128.7141842767596,
+          "tokens": 107,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "\"hollister\" - 1 use\n\"Main Website\" - 21 uses",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 43,
+          "run_type": "replay",
+          "intent": "List the top 3 search terms in my store",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 3666.41588229686,
+          "tokens": 151,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "The text only contains one search term with a count. There are not enough entries to provide 3 results.\n\n1. hollister (1 use)",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 77,
+          "run_type": "replay",
+          "intent": "What is the total count of Pending reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 180000,
+          "tokens": 52290,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "timeout_180s"
+        },
+        {
+          "task_id": 78,
+          "run_type": "replay",
+          "intent": "What is the total count of Approved reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 180000,
+          "tokens": 6961,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "timeout_180s"
+        },
+        {
+          "task_id": 79,
+          "run_type": "replay",
+          "intent": "What is the total count of Not Approved reviews amongst all the reviews?",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 180000,
+          "tokens": 13911,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "timeout_180s"
+        },
+        {
+          "task_id": 94,
+          "run_type": "replay",
+          "intent": "Telll me the grand total of invoice 000000001.",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 38160.651496611536,
+          "tokens": 6834,
+          "actions": 3,
+          "coverage": 0.6666666666666666,
+          "answer": "$36.39",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 95,
+          "run_type": "replay",
+          "intent": "Telll me the grand total of invoice 000000002.",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 28033.399568870664,
+          "tokens": 3397,
+          "actions": 1,
+          "coverage": 1.0,
+          "answer": "$39.64",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 127,
+          "run_type": "replay",
+          "intent": "What brands appear most frequently among the top search terms?",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 3230.859857983887,
+          "tokens": 1152,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "Hollister",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 195,
+          "run_type": "replay",
+          "intent": "Get the total payment amount of the last 5 pending orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 196,
+          "run_type": "replay",
+          "intent": "Compare the payment difference of the last 4 cancelled orders and completed orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 197,
+          "run_type": "replay",
+          "intent": "Get the total payment amount of the last 5 non-cancelled orders",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 198,
+          "run_type": "replay",
+          "intent": "Get the customer name of the most recent cancelled order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 36436.41224782914,
+          "tokens": 3430,
+          "actions": 4,
+          "coverage": 1.0,
+          "answer": "Lily Potter",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 199,
+          "run_type": "replay",
+          "intent": "Get the order ID of the newest pending order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 5977.776517160237,
+          "tokens": 116,
+          "actions": 7,
+          "coverage": 1.0,
+          "answer": "000000299",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 200,
+          "run_type": "replay",
+          "intent": "Get the billing name of the oldest complete order",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 63497.23911471665,
+          "tokens": 14729,
+          "actions": 6,
+          "coverage": 1.0,
+          "answer": "Ava Brown",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 201,
+          "run_type": "replay",
+          "intent": "Get the customer name of the earliest fraud suspect order",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 134403.38190551847,
+          "tokens": 55480,
+          "actions": 10,
+          "coverage": 0.4,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 203,
+          "run_type": "replay",
+          "intent": "Get the purchase date and order id of the most recent pending order",
+          "success": true,
+          "score": 1.0,
+          "time_ms": 4852.126752026379,
+          "tokens": 140,
+          "actions": 7,
+          "coverage": 1.0,
+          "answer": "Order ID: 000000299\nPurchase Date: May 31, 2023 2:55:09 AM",
+          "error": null,
+          "eval_details": {
+            "string_match": 1.0
+          }
+        },
+        {
+          "task_id": 208,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number +1 2058812302",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 209,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 2137418080",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 11138.488180935383,
+          "tokens": 303,
+          "actions": 7,
+          "coverage": 1.0,
+          "answer": "The provided text does not contain any customer name or email address information.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 210,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 2065555555",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 11532.711339183152,
+          "tokens": 298,
+          "actions": 7,
+          "coverage": 1.0,
+          "answer": "The provided text does not contain any customer name or email address information.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 211,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 8015551212",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 11209.204075857997,
+          "tokens": 298,
+          "actions": 7,
+          "coverage": 1.0,
+          "answer": "The provided text does not contain any customer name or email address information.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 212,
+          "run_type": "replay",
+          "intent": "Find the customer name and email with phone number 555-229-3326",
+          "success": true,
+          "score": 0.0,
+          "time_ms": 11213.124115020037,
+          "tokens": 307,
+          "actions": 7,
+          "coverage": 1.0,
+          "answer": "The provided text does not contain any customer name or email address information.",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 289,
+          "run_type": "replay",
+          "intent": "Tell me the email address, name, phone number of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        },
+        {
+          "task_id": 290,
+          "run_type": "replay",
+          "intent": "Tell me the product SKUs in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 96694.94235236198,
+          "tokens": 54324,
+          "actions": 19,
+          "coverage": 0.21052631578947367,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 291,
+          "run_type": "replay",
+          "intent": "Tell me the total spend on products in the most recent cancelled orders of the customer who has the most cancellations in the history",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 100404.894284904,
+          "tokens": 54385,
+          "actions": 18,
+          "coverage": 0.2222222222222222,
+          "answer": "",
+          "error": null,
+          "eval_details": {
+            "string_match": 0.0
+          }
+        },
+        {
+          "task_id": 491,
+          "run_type": "replay",
+          "intent": "Notify Sarah Miller in their most recent pending order with message \"the order is ready to be shipped soon!\"",
+          "success": false,
+          "score": 0.0,
+          "time_ms": 0,
+          "tokens": 0,
+          "actions": 0,
+          "coverage": 0,
+          "answer": "",
+          "error": "no_artifact"
+        }
+      ]
+    },
+    "mean_speedup": 5.756055990624276,
+    "speedups": [
+      0.7636360067348517,
+      1.4819284258434995,
+      0.781139188971492,
+      12.69773165005415,
+      11.496929912340594,
+      8.09468186512379,
+      0.5209442900229415,
+      0.5778964993311819,
+      29.30256649588807,
+      1.3166807398690863,
+      5.880879640777467,
+      1.5011185840742836,
+      8.914559208875147,
+      3.268474251088212,
+      2.8013336743709365,
+      2.696395416622726
+    ],
+    "eval_type_breakdown": {
+      "string_match": {
+        "pass": 13,
+        "total": 31
+      }
+    }
+  }
+}
