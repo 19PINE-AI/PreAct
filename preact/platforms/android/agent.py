@@ -8,6 +8,7 @@ for Android's accessibility tree and action format.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -136,11 +137,36 @@ class PreActAndroidAgent:
         action_history = []
         step_data = []
         answer = ""
+        screenshot_hashes: list[str] = []
+        no_effect_note = ""
 
         for step in range(self.max_cua_steps):
             # Get current state (works with both native and HTTP adapters)
             screenshot = await self.env.screenshot()
             ui_text = self.env.get_ui_elements_text()
+
+            # Hash the post-action screenshot. If the last 3 screenshots all
+            # hash the same AND at least one action was attempted, the last
+            # action had no visible effect — tell the LLM so it doesn't loop.
+            try:
+                screenshot_hashes.append(hashlib.sha1(screenshot).hexdigest())
+            except Exception:
+                screenshot_hashes.append("")
+            if (
+                len(screenshot_hashes) >= 3
+                and len(action_history) >= 1
+                and screenshot_hashes[-1]
+                and screenshot_hashes[-1] == screenshot_hashes[-2] == screenshot_hashes[-3]
+            ):
+                no_effect_note = (
+                    "\n\nNOTE: Your last action produced NO visible change on screen "
+                    "(screenshot is byte-identical to the previous two). "
+                    "Try a DIFFERENT element or a different approach — do not repeat "
+                    "the same action. If you were clicking by coordinate, try an element "
+                    "index or a different location."
+                )
+            else:
+                no_effect_note = ""
 
             # Format history
             history_text = "\n".join(action_history[-5:]) if action_history else "None"
@@ -191,7 +217,7 @@ class PreActAndroidAgent:
                 max_steps=self.max_cua_steps,
                 action_history=history_text,
                 ui_elements=ui_text,
-            ) + stuck_warning
+            ) + stuck_warning + no_effect_note
 
             # Call LLM with vision
             try:
@@ -410,6 +436,8 @@ class PreActAndroidAgent:
         """Execute a parsed CUA action dict via the environment adapter.
 
         Works with both native AndroidEnvironment and AndroidHTTPEnvironment.
+        Unknown or unsupported action types RAISE so the CUA loop records
+        the failure in action_history and the LLM sees the mistake.
         """
         action_type = action_dict.get("action_type", "")
 
@@ -419,6 +447,8 @@ class PreActAndroidAgent:
                 await self.env.click(f"index={idx}")
             elif action_dict.get("x") is not None:
                 await self.env.click(f"x={action_dict['x']}&&y={action_dict['y']}")
+            else:
+                raise ValueError("click action missing both index and x/y")
         elif action_type == "input_text":
             text = action_dict.get("text", "")
             idx = action_dict.get("index")
@@ -444,16 +474,75 @@ class PreActAndroidAgent:
             await self.env.press_key("enter")
         elif action_type == "long_press":
             idx = action_dict.get("index")
-            if idx is not None and hasattr(self.env, "right_click"):
+            x = action_dict.get("x")
+            y = action_dict.get("y")
+            if hasattr(self.env, "long_press"):
+                if idx is not None:
+                    await self.env.long_press(f"index={idx}")
+                elif x is not None and y is not None:
+                    await self.env.long_press((int(x), int(y)))
+                else:
+                    raise ValueError("long_press missing index and x/y")
+            elif idx is not None and hasattr(self.env, "right_click"):
                 await self.env.right_click(f"index={idx}")
-        elif action_type == "double_tap":
+            else:
+                raise ValueError("environment does not support long_press")
+        elif action_type == "double_tap" or action_type == "double_click":
             idx = action_dict.get("index")
             if idx is not None and hasattr(self.env, "double_click"):
                 await self.env.double_click(f"index={idx}")
+            elif action_dict.get("x") is not None and hasattr(self.env, "double_click"):
+                await self.env.double_click(
+                    f"x={action_dict['x']}&&y={action_dict['y']}"
+                )
+            else:
+                raise ValueError("environment does not support double_tap for this target")
+        elif action_type == "triple_click":
+            idx = action_dict.get("index")
+            x = action_dict.get("x")
+            y = action_dict.get("y")
+            if hasattr(self.env, "triple_click"):
+                if idx is not None:
+                    await self.env.triple_click(f"index={idx}")
+                elif x is not None and y is not None:
+                    await self.env.triple_click((int(x), int(y)))
+                else:
+                    raise ValueError("triple_click missing index and x/y")
+            else:
+                # Generic fallback: click three times quickly
+                if idx is not None:
+                    for _ in range(3):
+                        await self.env.click(f"index={idx}")
+                        await asyncio.sleep(0.08)
+                elif x is not None and y is not None:
+                    for _ in range(3):
+                        await self.env.click(f"x={x}&&y={y}")
+                        await asyncio.sleep(0.08)
+                else:
+                    raise ValueError("triple_click missing index and x/y")
+        elif action_type == "clear":
+            # Select-all + delete on the focused (or specified) editable field.
+            idx = action_dict.get("index")
+            if hasattr(self.env, "clear"):
+                if idx is not None:
+                    await self.env.clear(f"index={idx}")
+                else:
+                    await self.env.clear("")
+            else:
+                # Fallback: clear_and_type with empty string
+                target = f"index={idx}" if idx is not None else ""
+                if hasattr(self.env, "clear_and_type"):
+                    await self.env.clear_and_type(target, "")
+                else:
+                    raise ValueError("environment does not support clear")
         elif action_type == "wait":
             await self.env.wait_ms(1000)
+        elif action_type in ("status", "answer"):
+            # Terminal / bookkeeping actions handled by caller; this function
+            # should never be invoked for them, but guard against misuse.
+            return
         else:
-            logger.warning("Unknown CUA action type: %s", action_type)
+            raise ValueError(f"Unknown CUA action type: {action_type!r}")
 
     async def _execute_android_action(
         self,

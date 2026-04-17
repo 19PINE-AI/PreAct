@@ -319,7 +319,11 @@ class AndroidEnvironment:
     # ─── Actions ──────────────────────────────────────────────────────────
 
     async def click(self, selector: str) -> None:
-        """Click on element matching selector."""
+        """Click on element matching selector.
+
+        Raises ValueError if neither an element match nor parseable coords
+        can be derived from the selector — silent no-ops mislead the CUA loop.
+        """
         from android_world.env.json_action import JSONAction
         state = self._get_state()
         idx = _find_element_index(state.ui_elements, selector)
@@ -331,8 +335,9 @@ class AndroidEnvironment:
             if coords:
                 action = JSONAction(action_type="click", x=coords[0], y=coords[1])
             else:
-                logger.warning("click: element not found for selector: %s", selector)
-                return
+                raise ValueError(
+                    f"click: element not found and no parseable coords: {selector}"
+                )
         self._env.execute_action(action)
         await asyncio.sleep(0.5)
         self._last_state = None
@@ -360,7 +365,12 @@ class AndroidEnvironment:
             self._last_state = None
 
     async def type_text(self, selector: str, text: str) -> None:
-        """Type text into element."""
+        """Type text into element.
+
+        If the selector is empty, types into the currently focused field
+        (legacy behaviour). Otherwise requires either an element match or
+        parseable coords — raises if neither is available.
+        """
         from android_world.env.json_action import JSONAction
         state = self._get_state()
         idx = _find_element_index(state.ui_elements, selector)
@@ -369,6 +379,31 @@ class AndroidEnvironment:
             self._env.execute_action(action)
             await asyncio.sleep(0.5)
             self._last_state = None
+            return
+
+        coords = self._parse_coordinates(selector)
+        if coords:
+            self._env.execute_action(
+                JSONAction(action_type="click", x=coords[0], y=coords[1])
+            )
+            await asyncio.sleep(0.3)
+            self._env.execute_action(
+                JSONAction(action_type="input_text", text=text)
+            )
+            await asyncio.sleep(0.3)
+            self._last_state = None
+            return
+
+        if selector == "":
+            # Type into currently focused field
+            self._env.execute_action(JSONAction(action_type="input_text", text=text))
+            await asyncio.sleep(0.3)
+            self._last_state = None
+            return
+
+        raise ValueError(
+            f"type_text: element not found and no parseable coords: {selector}"
+        )
 
     async def clear_and_type(self, selector: str, text: str) -> None:
         """Clear field and type new text."""

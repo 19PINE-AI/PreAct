@@ -88,48 +88,112 @@ def _parse_selector(selector: str) -> dict[str, str]:
     return attrs
 
 
-def _element_matches(elem: HTTPUIElement, attrs: dict[str, str]) -> bool:
-    """Check if element matches selector attributes."""
+def _get_attr_value(elem: HTTPUIElement, key: str) -> Optional[str]:
+    """Return the element's value for a given selector key, or None if n/a."""
+    if key in ("resource_id", "resource_name"):
+        return elem.resource_name or elem.resource_id or ""
+    if key == "text":
+        return elem.text or ""
+    if key == "class":
+        return elem.class_name or ""
+    if key == "content_desc":
+        return elem.content_description or ""
+    if key == "hint":
+        return elem.hint_text or ""
+    if key == "package":
+        return elem.package_name or ""
+    if key == "checked":
+        return str(elem.is_checked).lower() if elem.is_checked is not None else ""
+    return None
+
+
+def _attr_matches_exact(elem: HTTPUIElement, key: str, value: str) -> bool:
+    elem_val = _get_attr_value(elem, key)
+    if elem_val is None:
+        return True  # unknown key — don't filter out
+    if key in ("package",):
+        return value == elem_val
+    if key in ("checked",):
+        return value.lower() == elem_val.lower()
+    # Case-insensitive exact compare for textual fields
+    return value.lower() == (elem_val or "").lower()
+
+
+def _attr_matches_substring(elem: HTTPUIElement, key: str, value: str) -> bool:
+    elem_val = _get_attr_value(elem, key)
+    if elem_val is None:
+        return True
+    if key in ("checked",):
+        return value.lower() == elem_val.lower()
+    if key in ("package",):
+        return value in (elem_val or "")
+    return value.lower() in (elem_val or "").lower()
+
+
+def _element_matches_exact(elem: HTTPUIElement, attrs: dict[str, str]) -> bool:
     for key, value in attrs.items():
-        if key in ("resource_id", "resource_name"):
-            elem_val = elem.resource_name or elem.resource_id or ""
-            if value not in (elem_val or ""):
-                return False
-        elif key == "text":
-            if value.lower() not in (elem.text or "").lower():
-                return False
-        elif key == "class":
-            if value.lower() not in (elem.class_name or "").lower():
-                return False
-        elif key == "content_desc":
-            if value.lower() not in (elem.content_description or "").lower():
-                return False
-        elif key == "hint":
-            if value.lower() not in (elem.hint_text or "").lower():
-                return False
-        elif key == "index":
-            pass  # handled separately
-        elif key == "package":
-            if value not in (elem.package_name or ""):
-                return False
-        elif key == "checked":
-            if str(elem.is_checked).lower() != value.lower():
-                return False
+        if key == "index":
+            continue
+        if not _attr_matches_exact(elem, key, value):
+            return False
     return True
 
 
+def _element_matches_substring(elem: HTTPUIElement, attrs: dict[str, str]) -> bool:
+    for key, value in attrs.items():
+        if key == "index":
+            continue
+        if not _attr_matches_substring(elem, key, value):
+            return False
+    return True
+
+
+# Back-compat alias used elsewhere in the module. Prefers substring (loosest)
+# but the preferred API is _find_element which does the two-pass scan below.
+def _element_matches(elem: HTTPUIElement, attrs: dict[str, str]) -> bool:
+    return _element_matches_substring(elem, attrs)
+
+
+# Records whether the most recent _find_element call fell back to substring
+# matching. Consumers (click/type_text error messages) can read this to give
+# the LLM better context about what went wrong.
+_LAST_MATCH_MODE: dict[str, str] = {"mode": "none"}
+
+
 def _find_element(elements: list[HTTPUIElement], selector: str) -> Optional[HTTPUIElement]:
-    """Find first element matching selector."""
+    """Find first element matching selector.
+
+    Two-pass scan:
+      1. Return the first element that matches ALL attrs exactly (case-insensitive).
+      2. If none found, fall back to substring match and log at INFO level.
+    """
     attrs = _parse_selector(selector)
     if "index" in attrs and len(attrs) == 1:
         idx = int(attrs["index"])
         for e in elements:
             if e.index == idx:
+                _LAST_MATCH_MODE["mode"] = "index"
                 return e
+        _LAST_MATCH_MODE["mode"] = "none"
         return None
+
+    # Pass 1: exact match
     for e in elements:
-        if _element_matches(e, attrs):
+        if _element_matches_exact(e, attrs):
+            _LAST_MATCH_MODE["mode"] = "exact"
             return e
+
+    # Pass 2: substring fallback
+    for e in elements:
+        if _element_matches_substring(e, attrs):
+            logger.info(
+                "selector substring-fallback matched for %r -> elem index=%s text=%r resource=%r",
+                selector, e.index, e.text, e.resource_name,
+            )
+            _LAST_MATCH_MODE["mode"] = "substring"
+            return e
+
+    _LAST_MATCH_MODE["mode"] = "none"
     return None
 
 
@@ -246,16 +310,40 @@ class AndroidHTTPEnvironment:
     # ─── Observation ──────────────────────────────────────────────────────
 
     async def screenshot(self) -> bytes:
-        """Capture screenshot as PNG bytes."""
-        b64, _ = self._get_state()
-        return base64.b64decode(b64)
+        """Capture screenshot as PNG bytes.
+
+        Attempts to decode the base64 PNG from /state; on decode failure,
+        falls back to /screenshot. If both fail, raises a descriptive error.
+        """
+        try:
+            b64, _ = self._get_state()
+        except Exception as e:
+            logger.warning("screenshot: _get_state failed (%s); trying fallback", e)
+            b64 = None
+
+        if b64:
+            try:
+                return base64.b64decode(b64)
+            except Exception as e:
+                logger.warning("screenshot: base64 decode failed (%s); trying fallback", e)
+
+        # Fallback path
+        try:
+            b64_fb = self._get_screenshot_fallback()
+            return base64.b64decode(b64_fb)
+        except Exception as e:
+            raise RuntimeError(f"screenshot: all capture paths failed: {e}") from e
 
     async def element_exists(self, selector: str, timeout_ms: int = 5000) -> bool:
-        """Check if element exists, polling until timeout."""
+        """Check if element exists, polling until timeout.
+
+        Each poll iteration re-fetches fresh UI state via _get_state() so we
+        never match against stale cached elements.
+        """
         deadline = time.time() + timeout_ms / 1000.0
         while True:
             _, elements = self._get_state()
-            if _find_element(elements, selector):
+            if _find_element(elements, selector) is not None:
                 return True
             if time.time() >= deadline:
                 return False
@@ -298,30 +386,163 @@ class AndroidHTTPEnvironment:
     async def click(self, selector: str) -> None:
         elem = _find_element(self._last_elements, selector)
         if elem and elem.center_x is not None:
+            mode = _LAST_MATCH_MODE.get("mode", "exact")
+            if mode == "substring":
+                logger.info(
+                    "click: fell back to substring match for selector=%r "
+                    "(matched index=%s, text=%r, resource=%r)",
+                    selector, elem.index, elem.text, elem.resource_name,
+                )
             self._exec_action({"action_type": "click", "x": elem.center_x, "y": elem.center_y})
-        else:
-            coords = self._parse_coordinates(selector)
-            if coords:
-                self._exec_action({"action_type": "click", "x": coords[0], "y": coords[1]})
-            else:
-                logger.warning("click: element not found: %s", selector)
-        await asyncio.sleep(0.5)
+            await asyncio.sleep(0.5)
+            return
+
+        coords = self._parse_coordinates(selector)
+        if coords:
+            self._exec_action({"action_type": "click", "x": coords[0], "y": coords[1]})
+            await asyncio.sleep(0.5)
+            return
+
+        # No element and no coordinates -- surface failure up to the CUA loop.
+        raise ValueError(
+            f"click: element not found and no parseable coords: {selector}"
+        )
 
     async def type_text(self, selector: str, text: str) -> None:
         elem = _find_element(self._last_elements, selector)
         if elem and elem.center_x is not None:
-            # Click first to focus
+            mode = _LAST_MATCH_MODE.get("mode", "exact")
+            if mode == "substring":
+                logger.info(
+                    "type_text: fell back to substring match for selector=%r "
+                    "(matched index=%s, text=%r, resource=%r)",
+                    selector, elem.index, elem.text, elem.resource_name,
+                )
+            # Click first to focus, then type
             self._exec_action({"action_type": "click", "x": elem.center_x, "y": elem.center_y})
             await asyncio.sleep(0.3)
-        self._exec_action({"action_type": "input_text", "text": text})
-        await asyncio.sleep(0.3)
+            self._exec_action({"action_type": "input_text", "text": text})
+            await asyncio.sleep(0.3)
+            return
+
+        coords = self._parse_coordinates(selector)
+        if coords:
+            self._exec_action({"action_type": "click", "x": coords[0], "y": coords[1]})
+            await asyncio.sleep(0.3)
+            self._exec_action({"action_type": "input_text", "text": text})
+            await asyncio.sleep(0.3)
+            return
+
+        # Empty selector means "the currently focused field" — keep legacy behaviour
+        # of firing input_text blindly in that narrow case. Anything else must fail
+        # loudly so the CUA loop can record & react.
+        if selector == "":
+            self._exec_action({"action_type": "input_text", "text": text})
+            await asyncio.sleep(0.3)
+            return
+
+        raise ValueError(
+            f"type_text: element not found and no parseable coords: {selector}"
+        )
 
     async def clear_and_type(self, selector: str, text: str) -> None:
         elem = _find_element(self._last_elements, selector)
         if elem and elem.center_x is not None:
             self._exec_action({"action_type": "click", "x": elem.center_x, "y": elem.center_y})
             await asyncio.sleep(0.3)
-        self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            await asyncio.sleep(0.3)
+            return
+
+        coords = self._parse_coordinates(selector)
+        if coords:
+            self._exec_action({"action_type": "click", "x": coords[0], "y": coords[1]})
+            await asyncio.sleep(0.3)
+            self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            await asyncio.sleep(0.3)
+            return
+
+        if selector == "":
+            self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            await asyncio.sleep(0.3)
+            return
+
+        raise ValueError(
+            f"clear_and_type: element not found and no parseable coords: {selector}"
+        )
+
+    async def triple_click(self, selector_or_coords) -> None:
+        """Three rapid clicks at the same coordinate.
+
+        Accepts either a selector string or a (x, y) tuple.
+        """
+        x: Optional[int] = None
+        y: Optional[int] = None
+        if isinstance(selector_or_coords, tuple) and len(selector_or_coords) == 2:
+            x, y = int(selector_or_coords[0]), int(selector_or_coords[1])
+        elif isinstance(selector_or_coords, str):
+            elem = _find_element(self._last_elements, selector_or_coords)
+            if elem and elem.center_x is not None:
+                x, y = elem.center_x, elem.center_y
+            else:
+                coords = self._parse_coordinates(selector_or_coords)
+                if coords:
+                    x, y = coords
+        if x is None or y is None:
+            raise ValueError(
+                f"triple_click: could not resolve coordinates from {selector_or_coords!r}"
+            )
+        for _ in range(3):
+            self._exec_action({"action_type": "click", "x": x, "y": y})
+            await asyncio.sleep(0.08)
+
+    async def clear(self, selector: str = "") -> None:
+        """Clear the currently focused editable field.
+
+        Uses the android server's input_text with clear_text=True and an empty
+        string. If a selector is provided we click it first to focus it.
+        """
+        if selector:
+            elem = _find_element(self._last_elements, selector)
+            if elem and elem.center_x is not None:
+                self._exec_action({"action_type": "click", "x": elem.center_x, "y": elem.center_y})
+                await asyncio.sleep(0.2)
+        self._exec_action({"action_type": "input_text", "text": "", "clear_text": True})
+        await asyncio.sleep(0.2)
+
+    async def long_press(self, selector_or_coords, duration_ms: int = 800) -> None:
+        """Press-and-hold. Tries the server's native long_press first, falls
+        back to two quick clicks plus wait if the server rejects it.
+        """
+        x: Optional[int] = None
+        y: Optional[int] = None
+        index: Optional[int] = None
+        if isinstance(selector_or_coords, tuple) and len(selector_or_coords) == 2:
+            x, y = int(selector_or_coords[0]), int(selector_or_coords[1])
+        elif isinstance(selector_or_coords, str):
+            elem = _find_element(self._last_elements, selector_or_coords)
+            if elem is not None:
+                index = elem.index
+                if elem.center_x is not None:
+                    x, y = elem.center_x, elem.center_y
+            if x is None:
+                coords = self._parse_coordinates(selector_or_coords)
+                if coords:
+                    x, y = coords
+        if x is None or y is None:
+            raise ValueError(
+                f"long_press: could not resolve coordinates from {selector_or_coords!r}"
+            )
+        try:
+            payload: dict[str, Any] = {"action_type": "long_press", "x": x, "y": y}
+            if index is not None:
+                payload["index"] = index
+            self._exec_action(payload)
+        except Exception as e:
+            logger.info("long_press native action failed (%s); falling back", e)
+            self._exec_action({"action_type": "click", "x": x, "y": y})
+            await asyncio.sleep(duration_ms / 1000.0)
+            self._exec_action({"action_type": "click", "x": x, "y": y})
         await asyncio.sleep(0.3)
 
     async def press_key(self, key: str) -> None:

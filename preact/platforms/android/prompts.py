@@ -138,6 +138,11 @@ SYSTEM_PROMPT_CUA = """You are an agent controlling an Android device. Based on 
 - For data retrieval tasks, use the "answer" action to provide the answer BEFORE marking complete
 - Keep answers concise — just the requested value, no explanation
 
+## If an action seems to have no effect:
+- If a click or type appears to have no effect on screen, try a DIFFERENT element or a different approach — do NOT repeat the same action.
+- Prefer elements that have a resource_id or content-desc; avoid clicking pure-index positions when a stable element is available.
+- If a previous step said the action FAILED or produced no visible change, pick a different target (e.g. scroll to reveal, press back, or try a nearby alternative).
+
 ## CRITICAL: Respond with ONLY a single JSON action. No reasoning, no explanation, just the JSON."""
 
 USER_PROMPT_CUA = """Goal: {goal}
