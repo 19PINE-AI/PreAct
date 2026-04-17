@@ -209,13 +209,14 @@ class CUALoop:
                     action_history.append(f"{action_desc} [FAILED: {str(e)[:60]}]")
                     continue
 
-                # 6. Record
+                # 6. Record (reuse screenshot from step observation)
                 if record and self.recorder:
                     xpath = action.target
                     await self.recorder.record_step(
                         action=action,
                         llm_reasoning=llm_response,
                         target_xpath=xpath,
+                        screenshot=screenshot,
                     )
 
                 await asyncio.sleep(self.config.action_delay_ms / 1000.0)

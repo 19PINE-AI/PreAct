@@ -39,10 +39,18 @@ from preact.config import LLMConfig
 from preact.environment.browser import BrowserEnvironment
 from preact.llm.client import LLMClient
 
+import sys
+
+# Force unbuffered logging output
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+))
+_handler.flush = lambda: sys.stderr.flush()
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
+    handlers=[_handler],
 )
 logger = logging.getLogger("webarena")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -231,6 +239,7 @@ async def run_system_benchmark(
             "    %s: %.0fms, %d tok, %d actions, score=%.1f",
             status, r1["time_ms"], r1["tokens"], r1["actions"], r1["score"],
         )
+        sys.stderr.flush()
 
         # ---- Run 2: Replay ----
         if not system.has_cached_artifact(task["intent"]):

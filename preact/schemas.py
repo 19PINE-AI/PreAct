@@ -251,6 +251,7 @@ class ExecutionResult(BaseModel):
     actions_executed: int = 0
     actions_via_rpa: int = 0
     actions_via_cua: int = 0
+    data: dict[str, Any] = Field(default_factory=dict)  # Data from inspect_text/inspect_screenshot
     error: str | None = None
 
     model_config = {"arbitrary_types_allowed": True}

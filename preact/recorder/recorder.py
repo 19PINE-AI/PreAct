@@ -64,21 +64,23 @@ class InteractionRecorder:
         llm_reasoning: str | None = None,
         target_xpath: str | None = None,
         element_info: dict[str, Any] | None = None,
+        screenshot: bytes | None = None,
     ) -> None:
         """Record a single interaction step.
 
         Called by the CUA Loop after each action is executed.
-        Captures screenshot, page URL, and optionally DOM snapshot.
+        Uses pre-captured screenshot if provided, otherwise captures a new one.
         """
         if not self._recording or not self._trace:
             return
 
-        screenshot_data = None
+        screenshot_data = screenshot
         screenshot_path = None
 
         if self.config.save_screenshots:
             try:
-                screenshot_data = await self.env.screenshot()
+                if screenshot_data is None:
+                    screenshot_data = await self.env.screenshot()
                 self._screenshot_count += 1
                 screenshot_path = os.path.join(
                     self.config.screenshot_dir,

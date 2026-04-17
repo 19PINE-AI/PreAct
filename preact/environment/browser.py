@@ -119,7 +119,8 @@ class BrowserEnvironment:
             # Fallback: check if element is in DOM but hidden (e.g. collapsed sidebar)
             try:
                 locator = self.page.locator(f"xpath={xpath}").first
-                await locator.wait_for(state="attached", timeout=1000)
+                fallback_timeout = min(timeout_ms, 1000)
+                await locator.wait_for(state="attached", timeout=fallback_timeout)
                 return True
             except Exception:
                 return False

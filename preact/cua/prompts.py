@@ -69,10 +69,12 @@ Output EXACTLY ONE JSON action per step:
   For example, if the current URL is http://hostname:port/admin, navigate to http://hostname:port/admin/sales/order/
   Use the same hostname and port visible in the current page URL.
 - On Magento Admin grid pages (Customers, Orders, etc.), if you need to search/filter:
-  1. First look for and click the "Filters" button (xpath: //button[@data-action='grid-filter-expand']) to expand the filter panel
-  2. Then type into the appropriate filter field (e.g., //input[@name='billing_telephone'], //input[@name='name'])
-  3. Then click the "Apply Filters" button (xpath: //button[@data-action='grid-filter-apply']) to apply the search
-  4. The grid will update to show matching results
+  1. FIRST check if an existing filter is active — look for "Reset Filter" link or colored filter indicators. If filters are already active, click the "Reset Filter" link (xpath: //span[contains(text(),'Reset Filter')]/.. or //button[contains(@class,'action-reset')]) to clear them before applying new ones
+  2. Click the "Filters" button (xpath: //button[@data-action='grid-filter-expand']) to expand the filter panel
+  3. Then type into the appropriate filter field (e.g., //input[@name='billing_telephone'], //input[@name='name'])
+  4. Then click the "Apply Filters" button (xpath: //button[@data-action='grid-filter-apply']) to apply the search
+  5. The grid will update to show matching results
+  - NOTE: Filters persist in the server session. When you navigate to a grid page, it may still have filters from a previous visit. Always check for and clear old filters before applying new ones
   - IMPORTANT: Use the xpaths from the "Interactive elements" list when available — do NOT guess element IDs
   - IMPORTANT: Button text is often inside a <span>, so //button[contains(text(),'...')] may fail. Use @data-action or @title attributes instead
 - When working in an admin panel (e.g., Magento Admin), use direct URL navigation and admin reports rather than browsing the customer-facing storefront

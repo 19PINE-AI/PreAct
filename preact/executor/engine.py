@@ -10,6 +10,7 @@ so the Agent Core can invoke the CUA loop for recovery.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -79,8 +80,29 @@ class RPAExecutor:
             return result
 
         consecutive_failures = 0
+        max_iterations = len(program.states) * 3 + 10
+        iteration = 0
 
         while current_state:
+            iteration += 1
+            if iteration > max_iterations:
+                result.error = f"max_iterations_exceeded:{max_iterations}"
+                logger.error(
+                    "Execution exceeded max iterations (%d), aborting",
+                    max_iterations,
+                )
+                try:
+                    screenshot = await self.env.screenshot()
+                    result.fallback_events.append(
+                        FallbackEvent(
+                            failed_state_id=current_state.id,
+                            failure_reason=f"max_iterations_exceeded:{max_iterations}",
+                            screenshot_data=screenshot,
+                        )
+                    )
+                except Exception:
+                    pass
+                break
             result.states_visited.append(current_state.id)
 
             # Check for human intervention before this state
@@ -93,28 +115,32 @@ class RPAExecutor:
 
             if not verified:
                 logger.warning(
-                    "State verification failed: %s", current_state.id
+                    "State verification failed: %s (attempt %d/%d)",
+                    current_state.id,
+                    consecutive_failures + 1,
+                    self.max_consecutive_failures,
                 )
                 consecutive_failures += 1
 
-                # Capture fallback event
-                screenshot = await self.env.screenshot()
-                fallback = FallbackEvent(
-                    failed_state_id=current_state.id,
-                    failure_reason=f"State verification timeout for {current_state.id}",
-                    screenshot_data=screenshot,
-                )
-                result.fallback_events.append(fallback)
-
                 if consecutive_failures >= self.max_consecutive_failures:
+                    # Capture fallback event only on final failure
+                    screenshot = await self.env.screenshot()
+                    fallback = FallbackEvent(
+                        failed_state_id=current_state.id,
+                        failure_reason=f"State verification timeout for {current_state.id}",
+                        screenshot_data=screenshot,
+                    )
+                    result.fallback_events.append(fallback)
                     result.error = (
                         f"state_verification_failed:{current_state.id}"
                     )
                     break
 
-                # Signal to Agent Core for CUA fallback
-                result.error = f"state_verification_failed:{current_state.id}"
-                break
+                # Wait for page to stabilize and retry verification.
+                # Common causes: page still loading after action, or
+                # initial state on wrong page (will navigate on retry).
+                await asyncio.sleep(1.0)
+                continue
 
             consecutive_failures = 0
 
@@ -132,7 +158,9 @@ class RPAExecutor:
                 break
 
             # ─── Select and execute transition ────────────────────────
-            transition = await self._select_transition(transitions, ctx)
+            transition = await self._select_transition(
+                transitions, ctx, current_state_id=current_state.id
+            )
 
             if not transition:
                 result.error = (
@@ -174,6 +202,18 @@ class RPAExecutor:
             action_time = (time.monotonic() - action_start) * 1000
             result.rpa_time_ms += action_time
 
+            # ─── Wait for page to stabilize after action ──────────────
+            # Actions like clicks and navigation trigger async page updates.
+            # Without this wait, the next state verification runs before
+            # the DOM has updated, causing xpath lookups to fail.
+            if transition.action.type in (
+                ActionType.ACTION_CLICK,
+                ActionType.ACTION_NAVIGATE,
+                ActionType.ACTION_KEYPRESS,
+                ActionType.ACTION_TYPE,
+            ):
+                await asyncio.sleep(0.5)
+
             # ─── Move to next state ───────────────────────────────────
             next_state = program.get_state(transition.to_state)
             if not next_state:
@@ -182,7 +222,8 @@ class RPAExecutor:
 
             current_state = next_state
 
-        # Finalize
+        # Finalize — propagate inspect_text/inspect_screenshot data
+        result.data = dict(ctx.data)
         result.total_time_ms = (time.monotonic() - start_time) * 1000
 
         if self.llm:
@@ -228,12 +269,18 @@ class RPAExecutor:
         self,
         transitions: list[Transition],
         ctx: ExecutionContext,
+        current_state_id: str | None = None,
     ) -> Transition | None:
         """Select the appropriate transition, evaluating guards if needed.
 
         If there's only one transition, use it directly.
         If there are multiple, evaluate each transition's condition/guard
         and take the first one that evaluates to True.
+
+        Self-loop transitions (from == to) are deprioritized: when a
+        non-self-loop unconditional transition exists, it is preferred.
+        This prevents infinite loops from compiler-generated wait/scroll
+        self-loops that precede exit transitions.
         """
         if len(transitions) == 1:
             t = transitions[0]
@@ -244,7 +291,8 @@ class RPAExecutor:
                 return None
             return t
 
-        # Multiple transitions: evaluate conditions
+        # Multiple transitions: evaluate conditions, deprioritize self-loops
+        fallback_self_loop: Transition | None = None
         for t in transitions:
             if t.action.type == ActionType.CONDITIONAL and t.action.condition:
                 if ctx.evaluate_expression(t.action.condition):
@@ -253,10 +301,19 @@ class RPAExecutor:
                 if ctx.evaluate_expression(t.condition):
                     return t
             else:
-                # Unconditional transition — use as default
-                return t
+                # Unconditional transition — prefer non-self-loop
+                is_self_loop = (
+                    current_state_id is not None
+                    and t.from_state == current_state_id
+                    and t.to_state == current_state_id
+                )
+                if is_self_loop:
+                    if fallback_self_loop is None:
+                        fallback_self_loop = t
+                else:
+                    return t
 
-        return None
+        return fallback_self_loop
 
     def _get_intervention(
         self, program: RPAProgram, state_id: str

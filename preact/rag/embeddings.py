@@ -92,7 +92,7 @@ class EmbeddingGenerator:
             try:
                 results = self._ef([text])
                 if results:
-                    embedding = list(results[0])
+                    embedding = results[0].tolist()
             except Exception as e:
                 logger.debug("Default embedding failed, using LLM fallback: %s", e)
 
