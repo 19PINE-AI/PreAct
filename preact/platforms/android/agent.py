@@ -230,14 +230,15 @@ class PreActAndroidAgent:
                     + items
                 )
 
-            # Build prompt
-            prompt = USER_PROMPT_CUA.format(
+            # Build prompt. Forbidden-note goes FIRST so the LLM sees it
+            # before the elements listing (which otherwise tempts re-picking).
+            prompt = forbidden_note + USER_PROMPT_CUA.format(
                 goal=goal,
                 step=step + 1,
                 max_steps=self.max_cua_steps,
                 action_history=history_text,
                 ui_elements=ui_text,
-            ) + stuck_warning + no_effect_note + forbidden_note
+            ) + stuck_warning + no_effect_note
 
             # Call LLM with vision
             try:

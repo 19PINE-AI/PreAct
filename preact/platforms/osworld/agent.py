@@ -223,7 +223,13 @@ class PreActOSAgent:
                 )
 
             forbidden_note = ""
+            forbidden_ids: set[str] = set()
             if forbidden_actions:
+                # Extract forbidden element IDs from "click(id=N)" patterns
+                for cmd in forbidden_actions:
+                    m = re.search(r"id=(\d+)", cmd)
+                    if m:
+                        forbidden_ids.add(m.group(1))
                 items = "\n".join(
                     f"  - {cmd} (ineffective after {n} tries)"
                     for cmd, n in sorted(
@@ -231,19 +237,28 @@ class PreActOSAgent:
                     )[:5]
                 )
                 forbidden_note = (
-                    "\n\n🚫 FORBIDDEN ACTIONS — these produced no progress; "
-                    "DO NOT repeat them. Pick a DIFFERENT element/approach:\n"
+                    "🚫 CRITICAL — FORBIDDEN ACTIONS. These produced NO progress "
+                    "and are BLOCKED this step. DO NOT emit any of them:\n"
                     + items
+                    + "\n\n"
                 )
+            # Mark forbidden ids in the a11y listing so LLM sees them inline
+            a11y_shown = a11y_text[:12000]
+            if forbidden_ids:
+                for fid in forbidden_ids:
+                    a11y_shown = a11y_shown.replace(
+                        f"[{fid}]", f"[{fid}-FORBIDDEN]"
+                    )
 
-            # Build prompt (Bug 4: cap 12000)
-            prompt = USER_PROMPT_CUA.format(
+            # Build prompt (Bug 4: cap 12000). Forbidden-note goes FIRST so
+            # it is seen before the UI elements listing.
+            prompt = forbidden_note + USER_PROMPT_CUA.format(
                 instruction=instruction,
                 step=step + 1,
                 max_steps=self.max_cua_steps,
                 action_history=history_text,
-                a11y_elements=a11y_text[:12000],
-            ) + stuck_warning + screen_unchanged_note + empty_a11y_note + forbidden_note
+                a11y_elements=a11y_shown,
+            ) + stuck_warning + screen_unchanged_note + empty_a11y_note
 
             # Call LLM with vision
             try:
