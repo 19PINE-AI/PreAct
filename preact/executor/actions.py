@@ -98,9 +98,14 @@ async def _action_type(
     if target:
         try:
             await env.type_text(target, text)
-        except Exception:
+        except Exception as e:
             # Fallback: element might be a <select> — try select_option
-            await env.select_option(target, text)
+            # Only fall back for element-type errors, not network/timeout
+            err_msg = str(e).lower()
+            if "fill" in err_msg or "input" in err_msg or "select" in err_msg or "element" in err_msg:
+                await env.select_option(target, text)
+            else:
+                raise
     else:
         # Type without a specific target (assume current focus)
         await env.press_key(text)
@@ -165,24 +170,40 @@ async def _action_inspect_text(
     ctx: ExecutionContext,
     llm: LLMClient | None,
 ) -> None:
-    """Extract text from an element and process with LLM."""
+    """Extract text from an element, capture full screenshot, and process with vision LLM + thinking."""
     if not action.target:
         raise ValueError("inspect_text requires a target XPath")
     if not llm:
         raise ValueError("inspect_text requires an LLM client")
 
     target = ctx.resolve_template(action.target)
-    text = await env.element_text(target)
     prompt = ctx.resolve_template(action.prompt or "Analyze this text")
 
-    response = await llm.complete(
-        messages=[
-            {
-                "role": "user",
-                "content": f"Given the following text extracted from a web element:\n\n"
-                f"---\n{text}\n---\n\n{prompt}",
-            }
-        ]
+    # Extract element text (may fail if XPath is stale — that's OK, screenshot is primary)
+    text = ""
+    try:
+        text = await env.element_text(target)
+    except Exception as e:
+        logger.warning("inspect_text: element_text failed for %s: %s", target, e)
+
+    # Capture full page screenshot for visual context
+    screenshot = await env.screenshot()
+
+    text_prompt = (
+        "You are extracting data from a web page. "
+        "Above is a screenshot of the full page as the user sees it.\n\n"
+    )
+    if text:
+        text_prompt += (
+            f"Additionally, here is the text content extracted from a specific element:\n\n"
+            f"---\n{text}\n---\n\n"
+        )
+    text_prompt += f"{prompt}"
+
+    response = await llm.complete_with_vision(
+        text_prompt=text_prompt,
+        images=[screenshot],
+        thinking_budget=4096,
     )
 
     if action.store_result_as:
@@ -195,19 +216,18 @@ async def _action_inspect_screenshot(
     ctx: ExecutionContext,
     llm: LLMClient | None,
 ) -> None:
-    """Capture element screenshot and process with vision LLM."""
-    if not action.target:
-        raise ValueError("inspect_screenshot requires a target XPath")
+    """Capture full page screenshot and process with vision LLM + thinking."""
     if not llm:
         raise ValueError("inspect_screenshot requires an LLM client")
 
-    target = ctx.resolve_template(action.target)
-    screenshot = await env.element_screenshot(target)
+    # Always use full page screenshot for maximum context
+    screenshot = await env.screenshot()
     prompt = ctx.resolve_template(action.prompt or "Analyze this image")
 
     response = await llm.complete_with_vision(
         text_prompt=prompt,
         images=[screenshot],
+        thinking_budget=4096,
     )
 
     if action.store_result_as:

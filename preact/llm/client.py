@@ -95,6 +95,7 @@ class LLMClient:
         system: str | None = None,
         response_format: dict | None = None,
         max_tokens: int | None = None,
+        thinking_budget: int | None = None,
     ) -> str:
         """Send a vision request with images to Claude.
 
@@ -104,6 +105,9 @@ class LLMClient:
             system: Optional system instruction.
             response_format: If provided, hint for JSON output.
             max_tokens: Override max_output_tokens for this call.
+            thinking_budget: If set, enable extended thinking with this
+                token budget.  Temperature is forced to 1 as required
+                by the API when thinking is enabled.
 
         Returns:
             The model's text response.
@@ -127,8 +131,20 @@ class LLMClient:
             "model": self.config.model,
             "max_tokens": max_tokens or self.config.max_output_tokens,
             "messages": [{"role": "user", "content": content}],
-            "temperature": self.config.temperature,
         }
+
+        if thinking_budget:
+            kwargs["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget,
+            }
+            # Temperature must be 1 when thinking is enabled
+            kwargs["temperature"] = 1
+            # Ensure max_tokens > thinking budget
+            if kwargs["max_tokens"] <= thinking_budget:
+                kwargs["max_tokens"] = thinking_budget + 4096
+        else:
+            kwargs["temperature"] = self.config.temperature
 
         if system:
             if response_format:
