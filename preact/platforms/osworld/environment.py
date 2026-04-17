@@ -204,23 +204,27 @@ def _find_element(elements: list[dict], selector: str) -> Optional[dict]:
 
 
 def _elements_to_text(elements: list[dict]) -> str:
-    """Format elements list for LLM prompts."""
+    """Format elements list for LLM prompts.
+
+    Bug 4 fix: dense line-per-element format
+        [idx] role "name" (cx,cy)
+    Indices start at 0 and align with _get_a11y_elements() so the LLM
+    can reference `click(id=N)` which the agent then maps to coordinates.
+    Falls back to text/description if name is absent.
+    """
     lines = []
     for i, elem in enumerate(elements):
-        parts = [f"[{i}]"]
-        if elem.get("role"):
-            parts.append(elem["role"])
-        if elem.get("name"):
-            parts.append(f'name="{elem["name"]}"')
-        if elem.get("text"):
-            parts.append(f'text="{elem["text"][:50]}"')
-        if elem.get("description"):
-            parts.append(f'desc="{elem["description"][:30]}"')
-        if elem.get("x") or elem.get("y"):
-            cx = elem.get("x", 0) + elem.get("width", 0) // 2
-            cy = elem.get("y", 0) + elem.get("height", 0) // 2
-            parts.append(f"center=({cx},{cy})")
-        lines.append(" ".join(parts))
+        role = elem.get("role") or "element"
+        label = (
+            elem.get("name")
+            or (elem.get("text") or "")[:60]
+            or (elem.get("description") or "")[:60]
+            or ""
+        )
+        cx = elem.get("x", 0) + elem.get("width", 0) // 2
+        cy = elem.get("y", 0) + elem.get("height", 0) // 2
+        label = label.replace('"', "'")
+        lines.append(f'[{i}] {role} "{label}" ({cx},{cy})')
     return "\n".join(lines)
 
 
@@ -248,17 +252,47 @@ class OSWorldEnvironment:
         return self._env._get_obs()
 
     def _get_a11y_elements(self) -> list[dict]:
-        """Get parsed accessibility tree elements."""
+        """Get parsed accessibility tree elements.
+
+        Bug 1 fix: never silently swallow errors. Log raw XML at DEBUG,
+        count at INFO, and any exception + raw XML at WARNING. Also warn
+        when the tree parses but returns zero elements — that indicates
+        the controller (not our parser) is returning nothing.
+        """
+        tree_xml = ""
         try:
             tree_xml = self._env.controller.get_accessibility_tree()
             if isinstance(tree_xml, dict):
                 tree_xml = tree_xml.get("AT", "")
+            tree_xml = tree_xml or ""
             self._last_a11y_tree = tree_xml
-            self._last_elements = _parse_a11y_tree(tree_xml)
-            return self._last_elements
+
+            logger.debug("a11y raw (first 500): %r", tree_xml[:500])
+
+            elements = _parse_a11y_tree(tree_xml)
+            self._last_elements = elements
+            logger.info("a11y tree parsed: %d elements (raw length=%d)",
+                        len(elements), len(tree_xml))
+            if not elements:
+                logger.warning(
+                    "a11y tree returned zero elements — check controller. "
+                    "Raw length=%d, raw head=%r",
+                    len(tree_xml), tree_xml[:500],
+                )
+            return elements
         except Exception as e:
-            logger.warning("Failed to get a11y tree: %s", e)
+            logger.warning(
+                "Failed to parse a11y tree: %r — raw (first 500): %r",
+                e, tree_xml[:500] if isinstance(tree_xml, str) else tree_xml,
+            )
             return self._last_elements or []
+
+    def a11y_tree_is_empty(self) -> bool:
+        """Return True if last a11y fetch returned no elements.
+
+        Used by the agent to inject a warning into the LLM context.
+        """
+        return not bool(self._last_elements)
 
     # ─── Lifecycle ────────────────────────────────────────────────────────
 
@@ -279,7 +313,15 @@ class OSWorldEnvironment:
     # ─── Observation ──────────────────────────────────────────────────────
 
     async def screenshot(self) -> bytes:
-        """Capture screenshot as PNG bytes."""
+        """Capture screenshot as PNG bytes.
+
+        Bug 7 fix: give the display compositor a short grace period before
+        grabbing the frame so that pyautogui-driven UI changes have time to
+        propagate (menus open, windows focus, text appears). 100ms is short
+        enough to be invisible in the total step budget but long enough to
+        avoid "screenshot taken before the UI updated" stale captures.
+        """
+        await asyncio.sleep(0.1)
         try:
             png_bytes = self._env.controller.get_screenshot()
             self._last_screenshot = png_bytes
@@ -364,36 +406,40 @@ class OSWorldEnvironment:
         return None
 
     async def click(self, selector: str) -> None:
-        """Click on element."""
+        """Click on element. Raises ValueError if selector does not resolve."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
-            await asyncio.sleep(0.5)
+        if not center:
+            raise ValueError(f"click: element not found: {selector}")
+        self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
+        await asyncio.sleep(0.5)
 
     async def double_click(self, selector: str) -> None:
-        """Double-click on element."""
+        """Double-click on element. Raises ValueError if selector does not resolve."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(
-                f"import pyautogui; pyautogui.doubleClick({center[0]}, {center[1]})"
-            )
-            await asyncio.sleep(0.5)
+        if not center:
+            raise ValueError(f"double_click: element not found: {selector}")
+        self._exec_pyautogui(
+            f"import pyautogui; pyautogui.doubleClick({center[0]}, {center[1]})"
+        )
+        await asyncio.sleep(0.5)
 
     async def right_click(self, selector: str) -> None:
-        """Right-click on element."""
+        """Right-click on element. Raises ValueError if selector does not resolve."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(
-                f"import pyautogui; pyautogui.rightClick({center[0]}, {center[1]})"
-            )
-            await asyncio.sleep(0.5)
+        if not center:
+            raise ValueError(f"right_click: element not found: {selector}")
+        self._exec_pyautogui(
+            f"import pyautogui; pyautogui.rightClick({center[0]}, {center[1]})"
+        )
+        await asyncio.sleep(0.5)
 
     async def type_text(self, selector: str, text: str) -> None:
-        """Click element then type text."""
+        """Click element then type text. Raises ValueError on missing selector."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
-            await asyncio.sleep(0.3)
+        if not center:
+            raise ValueError(f"type_text: element not found: {selector}")
+        self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
+        await asyncio.sleep(0.3)
 
         # Use write for unicode, typewrite for ASCII
         escaped = text.replace("\\", "\\\\").replace("'", "\\'")
@@ -401,11 +447,12 @@ class OSWorldEnvironment:
         await asyncio.sleep(0.3)
 
     async def clear_and_type(self, selector: str, text: str) -> None:
-        """Select all, then type."""
+        """Select all, then type. Raises ValueError on missing selector."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
-            await asyncio.sleep(0.2)
+        if not center:
+            raise ValueError(f"clear_and_type: element not found: {selector}")
+        self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
+        await asyncio.sleep(0.2)
 
         self._exec_pyautogui("import pyautogui; pyautogui.hotkey('ctrl', 'a')")
         await asyncio.sleep(0.1)
@@ -447,34 +494,39 @@ class OSWorldEnvironment:
     async def scroll_element(
         self, selector: str, direction: str = "down", amount: int = 3
     ) -> None:
-        """Scroll at element position."""
+        """Scroll at element position. Raises ValueError on missing selector."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(
-                f"import pyautogui; pyautogui.moveTo({center[0]}, {center[1]})"
-            )
-            await asyncio.sleep(0.1)
+        if not center:
+            raise ValueError(f"scroll_element: element not found: {selector}")
+        self._exec_pyautogui(
+            f"import pyautogui; pyautogui.moveTo({center[0]}, {center[1]})"
+        )
+        await asyncio.sleep(0.1)
         await self.scroll(direction, amount)
 
     async def move_to(self, selector: str) -> None:
-        """Move cursor to element."""
+        """Move cursor to element. Raises ValueError on missing selector."""
         center = self._get_element_center(selector)
-        if center:
-            self._exec_pyautogui(
-                f"import pyautogui; pyautogui.moveTo({center[0]}, {center[1]})"
-            )
+        if not center:
+            raise ValueError(f"move_to: element not found: {selector}")
+        self._exec_pyautogui(
+            f"import pyautogui; pyautogui.moveTo({center[0]}, {center[1]})"
+        )
 
     async def drag(self, from_selector: str, to_selector: str) -> None:
-        """Drag from one element to another."""
+        """Drag from one element to another. Raises ValueError on missing selector."""
         from_center = self._get_element_center(from_selector)
         to_center = self._get_element_center(to_selector)
-        if from_center and to_center:
-            dx = to_center[0] - from_center[0]
-            dy = to_center[1] - from_center[1]
-            self._exec_pyautogui(
-                f"import pyautogui; pyautogui.moveTo({from_center[0]}, {from_center[1]}); "
-                f"pyautogui.drag({dx}, {dy}, duration=0.5)"
-            )
+        if not from_center:
+            raise ValueError(f"drag: element not found (from): {from_selector}")
+        if not to_center:
+            raise ValueError(f"drag: element not found (to): {to_selector}")
+        dx = to_center[0] - from_center[0]
+        dy = to_center[1] - from_center[1]
+        self._exec_pyautogui(
+            f"import pyautogui; pyautogui.moveTo({from_center[0]}, {from_center[1]}); "
+            f"pyautogui.drag({dx}, {dy}, duration=0.5)"
+        )
 
     async def select_option(self, selector: str, value: str) -> None:
         """Click element, then type value."""
