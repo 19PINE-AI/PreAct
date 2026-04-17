@@ -55,6 +55,7 @@ class ModelGenerator:
         Returns:
             An RPAProgram (JSON state machine) ready for execution.
         """
+        trace = self._strip_login_steps(trace)
         trace_text = trace_to_text(trace)
 
         user_prompt = USER_PROMPT_COMPILE.format(trace_text=trace_text)
@@ -65,11 +66,109 @@ class ModelGenerator:
         )
 
         program = self._parse_program(response, trace)
+        program = self._ensure_inspect_text_for_info_retrieval(program, trace)
         logger.info(
             "Compiled trace (%d steps) into program (%d states, %d transitions)",
             len(trace.steps),
             len(program.states),
             len(program.transitions),
+        )
+        return program
+
+    @staticmethod
+    def _is_info_retrieval_task_text(task: str) -> bool:
+        lower = task.lower()
+        patterns = [
+            "what is", "what are", "how many", "how much",
+            "tell me", "show me", "list the", "list all",
+            "give me", "find the", "which", "who",
+            "present", "count", "total", "number of",
+            "get the", "compare", "provide", "summarize",
+            "identify", "determine", "check the", "check if",
+            "name of", "address of", "email of", "phone",
+            "most recent", "latest", "oldest", "newest",
+            "top ", "bottom ", "highest", "lowest",
+            "view", "retrieve", "fetch", "lookup", "display",
+            "read", "extract", "report", "query",
+        ]
+        return any(p in lower for p in patterns)
+
+    def _ensure_inspect_text_for_info_retrieval(
+        self, program: RPAProgram, trace: InteractionTrace
+    ) -> RPAProgram:
+        """Force-add an inspect_text before terminal state if missing.
+
+        Info-retrieval tasks require an answer; without inspect_text the
+        compiled program has no way to capture it during RPA replay.
+        """
+        task = program.metadata.task_description or trace.task_description or ""
+        if not self._is_info_retrieval_task_text(task):
+            return program
+
+        from preact.schemas import ActionSpec, ActionType, VerificationType
+
+        has_inspect = any(
+            t.action.type in (ActionType.INSPECT_TEXT, ActionType.INSPECT_SCREENSHOT)
+            for t in program.transitions
+        )
+        if has_inspect:
+            return program
+
+        # Find the terminal state
+        terminal_state = None
+        for s in program.states:
+            if s.verification.type == VerificationType.TERMINAL_STATE:
+                terminal_state = s
+                break
+        if terminal_state is None:
+            return program
+
+        # Find the transitions going INTO the terminal state
+        incoming = [t for t in program.transitions if t.to_state == terminal_state.id]
+        if not incoming:
+            return program
+
+        # Rewire: insert a pre-terminal state with inspect_screenshot
+        from preact.schemas import State, StateVerification, Transition
+
+        pre_terminal_id = f"{terminal_state.id}_inspect"
+        # Avoid ID collision
+        if any(s.id == pre_terminal_id for s in program.states):
+            pre_terminal_id = f"extract_answer_before_{terminal_state.id}"
+
+        pre_state = State(
+            id=pre_terminal_id,
+            verification=StateVerification(
+                type=VerificationType.EXPECT_ELEMENT,
+                xpath="//body",
+                timeout_ms=3000,
+            ),
+            description="Auto-inserted: extract answer before terminal",
+        )
+        program.states.append(pre_state)
+
+        # Rewire incoming transitions to point at pre_state
+        for t in incoming:
+            t.to_state = pre_terminal_id
+
+        inspect_prompt = (
+            f"Task: {task}\n"
+            f"Extract the exact answer from the screenshot. "
+            f"Return ONLY the raw value — no explanation, no full sentences."
+        )
+        program.transitions.append(
+            Transition(
+                from_state=pre_terminal_id,
+                to_state=terminal_state.id,
+                action=ActionSpec(
+                    type=ActionType.INSPECT_SCREENSHOT,
+                    prompt=inspect_prompt,
+                    store_result_as="answer",
+                ),
+            )
+        )
+        logger.info(
+            "Force-added inspect_screenshot before terminal state (info-retrieval task lacked it)"
         )
         return program
 
@@ -158,6 +257,15 @@ class ModelGenerator:
         # Fix malformed action fields (LLM sometimes produces strings)
         self._fix_transition_actions(data, trace)
 
+        # Strip malformed human_interventions — LLM often produces these
+        # with wrong field names (e.g., 'state' instead of 'before_state')
+        if "human_interventions" in data:
+            valid_interventions = []
+            for hi in data["human_interventions"]:
+                if isinstance(hi, dict) and "before_state" in hi and "prompt" in hi:
+                    valid_interventions.append(hi)
+            data["human_interventions"] = valid_interventions
+
         try:
             return RPAProgram.model_validate(data)
         except Exception as e:
@@ -244,6 +352,77 @@ class ModelGenerator:
                     t["action"] = step.action.model_dump()
                 else:
                     t["action"] = {"type": action, "target": "//body"}
+
+    @staticmethod
+    def _strip_login_steps(trace: InteractionTrace) -> InteractionTrace:
+        """Remove login/authentication steps from a trace.
+
+        When the browser starts with auth cookies, login steps in the
+        trace are artifacts of stale sessions and produce bloated programs
+        with self-loops. Strip them to keep programs compact.
+        """
+        login_indicators = [
+            "/admin/auth/login",
+            "/admin/dashboard",
+            "login-form",
+            "login_form",
+            "#username",
+            "#login",
+            "name='login[username]'",
+            "name='login[password]'",
+            "@id='login-form'",
+            "Sign in",
+        ]
+
+        def is_login_step(step) -> bool:
+            # Check URL
+            if step.page_url:
+                url = step.page_url.lower()
+                if "/auth/login" in url or url.endswith("/admin/") or url.endswith("/admin"):
+                    return True
+
+            # Check action target
+            target = (step.action.target or "").lower()
+            for indicator in login_indicators:
+                if indicator.lower() in target:
+                    return True
+
+            # Check typed text (username/password fields)
+            if step.action.type.value == "action_type" and step.action.text:
+                text = step.action.text.lower()
+                # Common admin credentials
+                if text in ("admin", "admin123", "magento"):
+                    return True
+
+            # Check action text (navigate to login page)
+            if step.action.type.value == "action_navigate" and step.action.text:
+                nav_url = step.action.text.lower()
+                if "/auth/login" in nav_url or nav_url.rstrip("/").endswith("/admin"):
+                    return True
+
+            return False
+
+        # Find the first non-login step
+        first_non_login = 0
+        for i, step in enumerate(trace.steps):
+            if not is_login_step(step):
+                first_non_login = i
+                break
+        else:
+            # All steps are login steps — return as-is
+            return trace
+
+        stripped_count = first_non_login
+        if stripped_count > 0:
+            logger.info(
+                "Stripped %d login steps from trace (%d → %d steps)",
+                stripped_count,
+                len(trace.steps),
+                len(trace.steps) - stripped_count,
+            )
+            trace.steps = trace.steps[first_non_login:]
+
+        return trace
 
     def _fallback_compile(self, trace: InteractionTrace) -> RPAProgram:
         """Create a minimal program directly from trace steps.

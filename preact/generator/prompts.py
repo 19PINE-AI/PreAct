@@ -47,17 +47,27 @@ Produce a JSON object with this exact structure:
 
 1. **State Identification**: Each distinct UI state in the trace becomes a state node. Identify states by the presence of key UI elements (buttons, inputs, dialogs, etc.). Use the XPaths from the trace for verification.
 
-2. **Parameterization**: Any text that was typed and appears to be user-specific input (emails, names, search terms, messages) should be parameterized. Use `parameter_name` in action_type actions instead of literal text.
+2. **Initial State**: The FIRST state must represent the starting page (e.g., admin dashboard). Use a GENERIC verification xpath that matches any admin page, such as `//body[contains(@class,'adminhtml')]` or `//body`. The first transition should be the navigation action that goes to the target page. Do NOT use page-specific xpaths (like `//input[@name='detail']`) for the initial state — those elements don't exist on the starting page.
 
-3. **State Verification**: Every non-terminal state must have an `expect_element` verification with a robust XPath. Use the XPaths observed in the trace. Set TIGHT timeouts: 2000ms for the initial state (page is already loaded), 1000ms for intermediate states where elements are already present on the page.
+3. **Parameterization**: Any text that was typed and appears to be user-specific input (emails, names, search terms, messages) should be parameterized. Use `parameter_name` in action_type actions instead of literal text. Do NOT parameterize admin credentials (username/password) — they are handled by the browser auth system.
 
-4. **Transitions**: Map each action in the trace to a transition between states. Include wait actions where the trace shows page loads or UI transitions.
+4. **State Verification**: Every non-terminal state must have an `expect_element` verification with a robust XPath. Use the XPaths observed in the trace. Set timeouts: 5000ms for the initial state, 3000ms for states after navigation or filter actions, 2000ms for states where elements are already present on the page.
 
-5. **Branching**: If the trace shows decision points (content inspection, conditional navigation), model them as branching transitions with conditions.
+5. **Transitions**: Map each action in the trace to a transition between states. Include wait actions where the trace shows page loads or UI transitions.
 
-6. **Terminal State**: The last state should be a terminal state marking task completion.
+6. **Branching**: If the trace shows decision points (content inspection, conditional navigation), model them as branching transitions with conditions.
 
-7. **Robustness**: Prefer XPaths using id, name, aria-label, role, or data-testid attributes over positional selectors. Avoid fragile index-based XPaths like //input[1] when more specific alternatives exist (e.g., //input[@name='custname']). For radio buttons and checkboxes, use @value: //input[@value='medium']. For buttons, use text: //button[contains(text(), 'Submit')].
+7. **Terminal State**: The last state should be a terminal state marking task completion.
+
+8. **Robustness**: Prefer XPaths using id, name, aria-label, role, or data-testid attributes over positional selectors. Avoid fragile index-based XPaths like //input[1] when more specific alternatives exist (e.g., //input[@name='custname']). For radio buttons and checkboxes, use @value: //input[@value='medium']. For buttons, use text: //button[contains(text(), 'Submit')].
+
+9. **NO Self-Loops**: NEVER create transitions where `from` and `to` are the same state. If multiple sequential actions happen on the same page, model each as a transition to a NEW distinct state (e.g., `page_username_entered`, `page_password_entered`). Self-loops cause the executor to get stuck in infinite loops.
+
+10. **Compact Programs**: Produce the MINIMUM number of states needed. A good program for a 4-step trace should have ~5-6 states. Consolidate consecutive actions on the same page into adjacent states. Do NOT add unnecessary wait states — the executor handles page stabilization automatically.
+
+11. **Skip Login/Auth**: Ignore any login or authentication steps in the trace (username, password, "Sign in" button clicks). The browser is pre-authenticated. Start the program from the first post-login action.
+
+12. **Answer Extraction (CRITICAL)**: If the task asks a question or requests any value from the page (e.g., "what is…", "how many…", "find…", "which…", "name of…", "top 5", "list", "most recent", "compare", "identify", "view", "display", "report"), you MUST include exactly one `inspect_screenshot` (preferred) or `inspect_text` action as the transition INTO or immediately before the terminal state, with `store_result_as: "answer"`. Without this, the program cannot produce an answer during replay and the task will fail. The prompt MUST say "Return ONLY the raw value — no explanation, no full sentences." Do NOT wrap this behind an `evaluate_condition`. Do NOT add an `evaluate_condition` after the inspect action. Prefer `inspect_screenshot` (it sees the whole page) over `inspect_text` (element-scoped).
 
 ## Action Types
 
@@ -69,8 +79,8 @@ Each action MUST be a JSON object with a "type" field. NEVER use a string — al
 - action_scroll: {"type": "action_scroll", "direction": "down|up", "amount": 3}
 - action_navigate: {"type": "action_navigate", "text": "<url>"}
 - wait: {"type": "wait", "ms": <milliseconds>}
-- inspect_text: {"type": "inspect_text", "target": "<xpath>", "prompt": "<question>", "store_result_as": "<key>"}
-- inspect_screenshot: {"type": "inspect_screenshot", "target": "<xpath>", "prompt": "<question>", "store_result_as": "<key>"}
+- inspect_text: {"type": "inspect_text", "target": "<xpath>", "prompt": "<question>", "store_result_as": "<key>"} — The prompt MUST instruct: "Return ONLY the value, no explanation." Example: "What is the grand total? Return ONLY the dollar amount."
+- inspect_screenshot: {"type": "inspect_screenshot", "target": "<xpath>", "prompt": "<question>", "store_result_as": "<key>"} — Same rule: prompt must request ONLY the raw value.
 - evaluate_condition: {"type": "evaluate_condition", "expression": "<expr>", "store_result_as": "<key>"}
 - conditional: {"type": "conditional", "condition": "<guard>"} — for branching transitions
 """
