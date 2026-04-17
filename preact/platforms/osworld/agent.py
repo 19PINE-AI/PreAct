@@ -141,6 +141,7 @@ class PreActOSAgent:
         step_data: list[dict] = []
         screenshot_hashes: list[str] = []
         answer = ""
+        forbidden_actions: dict[str, int] = {}
 
         for step in range(self.max_cua_steps):
             # Get current state
@@ -174,7 +175,8 @@ class PreActOSAgent:
                             stuck_count += 1
                         else:
                             break
-                    if stuck_count >= 4:
+                    if stuck_count >= 3:
+                        forbidden_actions[last_cmd] = forbidden_actions.get(last_cmd, 0) + stuck_count
                         # Force auto-recovery
                         recovery_actions = [
                             "import pyautogui; pyautogui.scroll(-3)",
@@ -220,6 +222,20 @@ class PreActOSAgent:
                     "on the screenshot and use raw_click(x,y) format."
                 )
 
+            forbidden_note = ""
+            if forbidden_actions:
+                items = "\n".join(
+                    f"  - {cmd} (ineffective after {n} tries)"
+                    for cmd, n in sorted(
+                        forbidden_actions.items(), key=lambda kv: -kv[1]
+                    )[:5]
+                )
+                forbidden_note = (
+                    "\n\n🚫 FORBIDDEN ACTIONS — these produced no progress; "
+                    "DO NOT repeat them. Pick a DIFFERENT element/approach:\n"
+                    + items
+                )
+
             # Build prompt (Bug 4: cap 12000)
             prompt = USER_PROMPT_CUA.format(
                 instruction=instruction,
@@ -227,7 +243,7 @@ class PreActOSAgent:
                 max_steps=self.max_cua_steps,
                 action_history=history_text,
                 a11y_elements=a11y_text[:12000],
-            ) + stuck_warning + screen_unchanged_note + empty_a11y_note
+            ) + stuck_warning + screen_unchanged_note + empty_a11y_note + forbidden_note
 
             # Call LLM with vision
             try:

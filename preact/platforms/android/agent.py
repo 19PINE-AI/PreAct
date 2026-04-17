@@ -139,6 +139,9 @@ class PreActAndroidAgent:
         answer = ""
         screenshot_hashes: list[str] = []
         no_effect_note = ""
+        # Track ineffective actions: when stuck-recovery fires, we add the
+        # repeated action to this set so subsequent prompts explicitly forbid it.
+        forbidden_actions: dict[str, int] = {}
 
         for step in range(self.max_cua_steps):
             # Get current state (works with both native and HTTP adapters)
@@ -185,7 +188,10 @@ class PreActAndroidAgent:
                             stuck_count += 1
                         else:
                             break
-                    if stuck_count >= 4:
+                    if stuck_count >= 3:
+                        # Add the repeated cmd to forbidden list so the LLM
+                        # is explicitly told not to retry it.
+                        forbidden_actions[last_cmd] = forbidden_actions.get(last_cmd, 0) + stuck_count
                         # Force auto-recovery
                         recovery_actions = [
                             {"action_type": "scroll", "direction": "down"},
@@ -210,6 +216,20 @@ class PreActAndroidAgent:
                         "- Try a totally different approach to the task"
                     )
 
+            forbidden_note = ""
+            if forbidden_actions:
+                items = "\n".join(
+                    f"  - {cmd} (ineffective after {n} tries)"
+                    for cmd, n in sorted(
+                        forbidden_actions.items(), key=lambda kv: -kv[1]
+                    )[:5]
+                )
+                forbidden_note = (
+                    "\n\n🚫 FORBIDDEN ACTIONS — these produced no progress; "
+                    "DO NOT repeat them. Pick a DIFFERENT element/approach:\n"
+                    + items
+                )
+
             # Build prompt
             prompt = USER_PROMPT_CUA.format(
                 goal=goal,
@@ -217,7 +237,7 @@ class PreActAndroidAgent:
                 max_steps=self.max_cua_steps,
                 action_history=history_text,
                 ui_elements=ui_text,
-            ) + stuck_warning + no_effect_note
+            ) + stuck_warning + no_effect_note + forbidden_note
 
             # Call LLM with vision
             try:
