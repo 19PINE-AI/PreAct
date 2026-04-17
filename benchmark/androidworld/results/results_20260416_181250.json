@@ -1,0 +1,86 @@
+{
+  "timestamp": "20260416_181250",
+  "args": {
+    "tasks": [
+      "ContactsAddContact",
+      "SimpleCalendarProAddOneEvent",
+      "ClockStopWatchRunning",
+      "SettingsEnableAirplaneMode"
+    ],
+    "max_tasks": 20,
+    "systems": [
+      "preact"
+    ],
+    "n_instances": 2,
+    "max_steps": 15,
+    "port": 5555,
+    "seed": 42
+  },
+  "summary": {
+    "preact": {
+      "total": 4,
+      "success": 4,
+      "success_rate": 1.0,
+      "avg_tokens": 15570.25,
+      "avg_time_ms": 19128.572165966034
+    }
+  },
+  "results": [
+    {
+      "task_name": "ContactsAddContact",
+      "instance_id": 0,
+      "system": "preact",
+      "success": true,
+      "score": 1.0,
+      "mode": "cua",
+      "time_ms": 28420.15552520752,
+      "tokens": 22921,
+      "actions": 8,
+      "actions_rpa": 0,
+      "graph_coverage": 0.0,
+      "error": null
+    },
+    {
+      "task_name": "ContactsAddContact",
+      "instance_id": 1,
+      "system": "preact",
+      "success": true,
+      "score": 1.0,
+      "mode": "cua",
+      "time_ms": 22651.20267868042,
+      "tokens": 20398,
+      "actions": 7,
+      "actions_rpa": 0,
+      "graph_coverage": 0.0,
+      "error": null
+    },
+    {
+      "task_name": "ClockStopWatchRunning",
+      "instance_id": 0,
+      "system": "preact",
+      "success": true,
+      "score": 1.0,
+      "mode": "cua",
+      "time_ms": 12233.086109161377,
+      "tokens": 9482,
+      "actions": 4,
+      "actions_rpa": 0,
+      "graph_coverage": 0.0,
+      "error": null
+    },
+    {
+      "task_name": "ClockStopWatchRunning",
+      "instance_id": 1,
+      "system": "preact",
+      "success": true,
+      "score": 1.0,
+      "mode": "cua",
+      "time_ms": 13209.84435081482,
+      "tokens": 9480,
+      "actions": 4,
+      "actions_rpa": 0,
+      "graph_coverage": 0.0,
+      "error": null
+    }
+  ]
+}

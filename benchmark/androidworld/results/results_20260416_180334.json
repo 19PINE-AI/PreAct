@@ -1,0 +1,41 @@
+{
+  "timestamp": "20260416_180334",
+  "args": {
+    "tasks": [
+      "ContactsAddContact"
+    ],
+    "max_tasks": 20,
+    "systems": [
+      "preact"
+    ],
+    "n_instances": 1,
+    "max_steps": 15,
+    "port": 5555,
+    "seed": 42
+  },
+  "summary": {
+    "preact": {
+      "total": 1,
+      "success": 0,
+      "success_rate": 0.0,
+      "avg_tokens": 32023.0,
+      "avg_time_ms": 270272.8238105774
+    }
+  },
+  "results": [
+    {
+      "task_name": "ContactsAddContact",
+      "instance_id": 0,
+      "system": "preact",
+      "success": false,
+      "score": 0.0,
+      "mode": "cua",
+      "time_ms": 270272.8238105774,
+      "tokens": 32023,
+      "actions": 15,
+      "actions_rpa": 0,
+      "graph_coverage": 0.0,
+      "error": null
+    }
+  ]
+}
