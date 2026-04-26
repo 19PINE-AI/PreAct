@@ -88,6 +88,7 @@ async def run_preact_task(
     task_name: str,
     task_idx: int,
     max_steps: int,
+    verify_before_store: bool = True,
 ) -> TaskResult:
     """Run a task using PreAct agent."""
     start = time.time()
@@ -96,16 +97,53 @@ async def run_preact_task(
         result = await agent.execute_task(goal)
         elapsed_ms = (time.time() - start) * 1000
 
-        # Evaluate via server
+        # Evaluate via server. The grader is the ground truth — if the task
+        # state is correct we count it as success even if the agent did not
+        # explicitly emit status=complete (many tasks are graded purely on
+        # final environment state).
         score = env.get_task_score(task_name, task_idx)
-        success = score >= 1.0 and result.success
+        success = score >= 1.0
 
-        # Compile if CUA succeeded
-        if result.mode == "cua" and result.success and result.step_data:
+        # Compile + verify + store. We store whenever the live evaluator
+        # agrees the task was completed and we have CUA trace data — this
+        # includes hybrid mode (partial RPA + CUA fallback), which still
+        # has useful CUA steps to compile from. Verification re-initializes
+        # the task instance and replays the compiled program; if that
+        # re-pass fails, the program is lossy and we discard it.
+        if result.success and success and result.step_data:
             try:
-                await agent.compile_and_store(goal, result.step_data)
+                program = await agent.compile(goal, result.step_data)
+                if program is None:
+                    logger.warning("Compile returned no program")
+                elif verify_before_store:
+                    logger.info(
+                        "Verifying compiled program (%d states) against re-init…",
+                        len(program.states),
+                    )
+                    # Stateless reset
+                    try:
+                        env.tear_down_task(task_name, task_idx)
+                    except Exception:
+                        pass
+                    await env.reset()
+                    env.initialize_task(task_name, task_idx)
+                    await asyncio.sleep(3)
+                    await agent.replay_program(goal, program)
+                    await asyncio.sleep(2)
+                    verify_score = env.get_task_score(task_name, task_idx)
+                    if verify_score >= 1.0:
+                        pid = await agent.store_program(program)
+                        logger.info("Verified and stored: %s", (pid or "")[:8])
+                    else:
+                        logger.warning(
+                            "Program failed verification (score=%.1f) — discarded",
+                            verify_score,
+                        )
+                else:
+                    pid = await agent.store_program(program)
+                    logger.info("Stored (unverified): %s", (pid or "")[:8])
             except Exception as e:
-                logger.warning("Compilation failed: %s", e)
+                logger.warning("Compile/verify failed: %s", e)
 
         return TaskResult(
             task_name=task_name,
@@ -350,9 +388,40 @@ async def run_benchmark(args):
                     logger.error("Task init failed: %s", e)
                     continue
 
+                # Dynamic step budget: scale with complexity but cap at 30.
+                # Prior `10 * complexity` left stuck trajectories burning up to
+                # 60 steps on complexity=6 tasks; `8 * complexity` with a hard
+                # ceiling of 30 keeps successful complex tasks within budget
+                # while limiting wasted wall time on bad CUA tails.
+                task_max_steps = args.max_steps
+                if args.dynamic_steps:
+                    try:
+                        complexity = env.get_task_complexity(task_name, task_idx)
+                        task_max_steps = min(
+                            max(args.max_steps, int(8 * complexity)), 30
+                        )
+                        if task_max_steps != args.max_steps:
+                            logger.info(
+                                "step budget: complexity=%.1f → %d steps (capped at 30)",
+                                complexity, task_max_steps,
+                            )
+                    except Exception as e:
+                        logger.warning("complexity lookup failed: %s", e)
+                preact_agent_max = getattr(preact_agent, "max_cua_steps", None)
+                if preact_agent is not None:
+                    preact_agent.max_cua_steps = task_max_steps
+
                 if system_name == "preact" and preact_agent:
+                    # Point the agent at a per-task trajectory dir so each
+                    # step's screenshots+prompt+response can be diagnosed
+                    # offline without re-running the benchmark.
+                    traj_dir = (
+                        f"trajectories/android/{task_name}_inst{task_idx}"
+                    )
+                    preact_agent._trajectory_dir = traj_dir
                     result = await run_preact_task(
-                        env, preact_agent, goal, task_name, task_idx, args.max_steps
+                        env, preact_agent, goal, task_name, task_idx, task_max_steps,
+                        verify_before_store=args.verify_before_store,
                     )
                 elif system_name == "standard_cua" and llm:
                     result = await run_standard_cua_task(
@@ -432,9 +501,34 @@ def main():
     parser.add_argument("--max-tasks", type=int, default=20, help="Max task types if --tasks not set")
     parser.add_argument("--systems", nargs="+", default=["preact"], help="Systems: preact, standard_cua")
     parser.add_argument("--n-instances", type=int, default=2, help="Instances per task type")
-    parser.add_argument("--max-steps", type=int, default=15, help="Max CUA steps")
+    parser.add_argument("--max-steps", type=int, default=15, help="Min CUA steps (overridden by complexity when --dynamic-steps)")
+    parser.add_argument(
+        "--dynamic-steps",
+        action="store_true",
+        default=True,
+        help="Use per-task T3A budget: int(10*complexity) — matches SOTA.",
+    )
+    parser.add_argument(
+        "--no-dynamic-steps",
+        dest="dynamic_steps",
+        action="store_false",
+        help="Pin max_steps flat at --max-steps.",
+    )
     parser.add_argument("--port", type=int, default=5000, help="Docker server port")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for task params")
+    parser.add_argument(
+        "--verify-before-store",
+        dest="verify_before_store",
+        action="store_true",
+        default=True,
+        help="Replay compiled program and re-evaluate before storing (default: on).",
+    )
+    parser.add_argument(
+        "--no-verify-before-store",
+        dest="verify_before_store",
+        action="store_false",
+        help="Skip verification replay — store on first successful compile.",
+    )
     args = parser.parse_args()
 
     asyncio.run(run_benchmark(args))

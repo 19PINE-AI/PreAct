@@ -158,6 +158,71 @@ class LLMClient:
         self._track_usage(response)
         return self._extract_text(response)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+    )
+    async def complete_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        system: str | None = None,
+        tool_choice: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Anthropic-native tool-use loop single call.
+
+        Returns {"text": str, "tool_uses": [{"id","name","input"}],
+                 "stop_reason": str, "assistant_blocks": [...]}.
+        Caller runs the tools and appends a user message with tool_result
+        blocks, then re-invokes with the extended messages list.
+        """
+        normalized: list[dict[str, Any]] = []
+        for msg in messages:
+            role = "assistant" if msg.get("role") == "model" else msg.get("role", "user")
+            normalized.append({"role": role, "content": msg.get("content", "")})
+
+        kwargs: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_output_tokens,
+            "messages": normalized,
+            "tools": tools,
+            "temperature": self.config.temperature,
+        }
+        if system:
+            kwargs["system"] = system
+        if tool_choice:
+            kwargs["tool_choice"] = tool_choice
+
+        response = await self._client.messages.create(**kwargs)
+        self._track_usage(response)
+
+        text = ""
+        tool_uses: list[dict[str, Any]] = []
+        assistant_blocks: list[dict[str, Any]] = []
+        for block in response.content:
+            if block.type == "text":
+                text += block.text
+                assistant_blocks.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                tool_uses.append({
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+                assistant_blocks.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+
+        return {
+            "text": text,
+            "tool_uses": tool_uses,
+            "stop_reason": getattr(response, "stop_reason", ""),
+            "assistant_blocks": assistant_blocks,
+        }
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts.
 

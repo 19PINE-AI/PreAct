@@ -21,9 +21,11 @@ from preact.platforms.android.environment import AndroidEnvironment
 from preact.platforms.android.prompts import (
     SYSTEM_PROMPT_COMPILE,
     SYSTEM_PROMPT_CUA,
+    SYSTEM_PROMPT_SUMMARY,
     USER_PROMPT_COMPILE,
     USER_PROMPT_CUA,
     USER_PROMPT_CUA_FALLBACK,
+    USER_PROMPT_SUMMARY,
     format_trace_for_compilation,
 )
 from preact.rag.store import ProgramStore
@@ -74,11 +76,21 @@ class PreActAndroidAgent:
         llm: LLMClient,
         store: Optional[ProgramStore] = None,
         max_cua_steps: int = 15,
+        use_official_t3a: bool = True,
     ):
         self.env = env
         self.llm = llm
         self.store = store
         self.max_cua_steps = max_cua_steps
+        # When True, the CUA path delegates to the ported T3A agent
+        # (`preact.platforms.android.t3a_cua.T3AClaudeCUA`), which uses
+        # verbatim prompts / control flow from the official AndroidWorld
+        # T3A for apples-to-apples SOTA baseline parity.
+        self.use_official_t3a = use_official_t3a
+        # Agentic selector — reads program descriptions and picks one via
+        # tool-calling. Replaces the prior keyword/embedding RAG.
+        from preact.rag.selector import ProgramSelector
+        self.selector = ProgramSelector(llm, store) if store else None
 
     async def execute_task(
         self,
@@ -99,26 +111,19 @@ class PreActAndroidAgent:
         start_time = time.time()
         self.llm.reset_usage()
 
-        # Step 1: Check RAG for matching program
+        # Step 1: Let the selector agent pick a program by description.
         program = None
-        if not force_cua and self.store:
+        if not force_cua and self.selector:
             try:
-                matches = await self.store.query(goal, k=1)
-                if matches:
-                    program = matches[0]
-                    logger.info(
-                        "Found matching program: %s (v%d, %d states)",
-                        program.metadata.program_id[:8],
-                        program.metadata.version,
-                        len(program.states),
+                program = await self.selector.select(
+                    task=goal, platform="android"
+                )
+                if program and not parameters:
+                    parameters = self._extract_parameters(
+                        goal, program.metadata.parameters
                     )
-                    # Extract parameters from goal
-                    if not parameters:
-                        parameters = self._extract_parameters(
-                            goal, program.metadata.parameters
-                        )
             except Exception as e:
-                logger.warning("RAG lookup failed: %s", e)
+                logger.warning("Selector failed: %s", e)
 
         # Step 2: Execute
         if program:
@@ -132,6 +137,9 @@ class PreActAndroidAgent:
 
     async def _execute_with_cua(self, goal: str) -> AndroidTaskResult:
         """Execute task using CUA (LLM-driven exploration)."""
+        if self.use_official_t3a:
+            return await self._execute_with_t3a(goal)
+
         logger.info("Running CUA for: %s", goal[:80])
 
         action_history = []
@@ -144,9 +152,22 @@ class PreActAndroidAgent:
         forbidden_actions: dict[str, int] = {}
 
         for step in range(self.max_cua_steps):
-            # Get current state (works with both native and HTTP adapters)
-            screenshot = await self.env.screenshot()
+            # Match M3A: send BOTH raw screenshot and annotated (SoM) screenshot.
+            # The raw view is unobscured (useful when boxes overlap); the
+            # annotated view correlates visual position to element index.
+            raw_screenshot = await self.env.screenshot()
+            if hasattr(self.env, "annotated_screenshot"):
+                try:
+                    annotated_screenshot = await self.env.annotated_screenshot()
+                except Exception as e:
+                    logger.warning("annotated_screenshot failed: %s; raw only", e)
+                    annotated_screenshot = raw_screenshot
+            else:
+                annotated_screenshot = raw_screenshot
             ui_text = self.env.get_ui_elements_text()
+            # Hash the annotated screenshot (it's a strict superset of raw in
+            # terms of screen-change detection — boxes move when UI moves).
+            screenshot = annotated_screenshot
 
             # Hash the post-action screenshot. If the last 3 screenshots all
             # hash the same AND at least one action was attempted, the last
@@ -174,47 +195,89 @@ class PreActAndroidAgent:
             # Format history
             history_text = "\n".join(action_history[-5:]) if action_history else "None"
 
-            # Detect repeated actions (stuck detection)
+            # Detect stuck loops. Covers three patterns:
+            #   (a) consecutive repeat: A A A
+            #   (b) 2-cycle oscillation: A B A B A B  (common failure mode)
+            #   (c) 3-cycle oscillation: A B C A B C
+            # In all three cases every action in the cycle gets forbidden
+            # and a recovery action is forced.
             stuck_warning = ""
-            if len(action_history) >= 2:
-                recent = action_history[-3:] if len(action_history) >= 3 else action_history[-2:]
-                recent_cmds = [h.split(": ", 1)[1] if ": " in h else h for h in recent]
-                if len(set(recent_cmds)) == 1:
-                    stuck_count = 0
-                    last_cmd = recent_cmds[-1]
-                    for h in reversed(action_history):
-                        cmd = h.split(": ", 1)[1] if ": " in h else h
-                        if cmd == last_cmd:
-                            stuck_count += 1
-                        else:
-                            break
-                    if stuck_count >= 3:
-                        # Add the repeated cmd to forbidden list so the LLM
-                        # is explicitly told not to retry it.
-                        forbidden_actions[last_cmd] = forbidden_actions.get(last_cmd, 0) + stuck_count
-                        # Force auto-recovery
-                        recovery_actions = [
-                            {"action_type": "scroll", "direction": "down"},
-                            {"action_type": "navigate_back"},
-                            {"action_type": "scroll", "direction": "up"},
-                        ]
-                        recovery = recovery_actions[stuck_count % len(recovery_actions)]
-                        logger.info("Auto-recovery (stuck %d times): %s", stuck_count, recovery)
-                        await self._execute_cua_action(recovery)
-                        await asyncio.sleep(0.5)
-                        action_history.append(f"Step {step+1}: AUTO_RECOVERY {recovery['action_type']}")
-                        continue
-                    stuck_warning = (
-                        "\n\n⚠️ WARNING: You have repeated the SAME action "
-                        f"{stuck_count} times and the screen has NOT changed. "
-                        "Your clicks are NOT working. You MUST try something "
-                        "COMPLETELY DIFFERENT:\n"
-                        "- Try scrolling to reveal more content\n"
-                        "- Try pressing back and navigating differently\n"
-                        "- Try clicking a DIFFERENT element on screen\n"
-                        "- Try opening a different app\n"
-                        "- Try a totally different approach to the task"
-                    )
+            # IMPORTANT: include AUTO_RECOVERY entries in cycle history so
+            # each recovery breaks the pattern and we don't loop forever.
+            cmds_hist = [
+                h.split(": ", 1)[1] if ": " in h else h
+                for h in action_history
+            ]
+
+            def _detect_cycle(hist: list[str]) -> tuple[int, list[str]] | None:
+                """Return (cycle_len, unique_cmds) if last N*k entries form a repeating cycle."""
+                # (a) consecutive repeat
+                if len(hist) >= 3 and hist[-1] == hist[-2] == hist[-3]:
+                    return (1, [hist[-1]])
+                # (b) 2-cycle: need at least 4 entries, and last 4 pattern ABAB
+                if (
+                    len(hist) >= 4
+                    and hist[-1] == hist[-3]
+                    and hist[-2] == hist[-4]
+                    and hist[-1] != hist[-2]
+                ):
+                    return (2, [hist[-2], hist[-1]])
+                # (c) 3-cycle: last 6 ABCABC
+                if (
+                    len(hist) >= 6
+                    and hist[-1] == hist[-4]
+                    and hist[-2] == hist[-5]
+                    and hist[-3] == hist[-6]
+                    and len({hist[-1], hist[-2], hist[-3]}) == 3
+                ):
+                    return (3, [hist[-3], hist[-2], hist[-1]])
+                return None
+
+            cycle = _detect_cycle(cmds_hist)
+            # Guard: apply UI-hash identity only to MULTI-step cycles
+            # (ABAB digit-entry making real progress). For pure 1-cycle
+            # (AAA) — same action repeated — always flag as stuck: same
+            # action + no progress is stuck regardless of minor screen
+            # animation. Otherwise dynamic pages (loading spinners, focus
+            # rings) would silence legit stuck detection.
+            if cycle is not None and cycle[0] >= 2 and len(screenshot_hashes) >= 2:
+                cycle_len = cycle[0]
+                needed = cycle_len * 2
+                if len(screenshot_hashes) >= needed and len(cmds_hist) >= needed:
+                    # Align: screenshot_hashes captured BEFORE each action_history entry.
+                    # AUTO_RECOVERY iterations also captured a screenshot, so the lists
+                    # line up index-by-index.
+                    tail_hashes = screenshot_hashes[-needed:]
+                    first_half = tail_hashes[:cycle_len]
+                    second_half = tail_hashes[cycle_len:]
+                    if any(
+                        h1 and h2 and h1 != h2
+                        for h1, h2 in zip(first_half, second_half)
+                    ):
+                        cycle = None
+            if cycle is not None:
+                cycle_len, unique_cmds = cycle
+                for cmd in unique_cmds:
+                    forbidden_actions[cmd] = forbidden_actions.get(cmd, 0) + 1
+                recovery_actions = [
+                    {"action_type": "scroll", "direction": "down"},
+                    {"action_type": "navigate_back"},
+                    {"action_type": "scroll", "direction": "up"},
+                    {"action_type": "navigate_home"},
+                ]
+                total_forbidden = sum(forbidden_actions.values())
+                recovery = recovery_actions[total_forbidden % len(recovery_actions)]
+                logger.info(
+                    "Stuck (cycle_len=%d, cmds=%s) — forcing recovery: %s",
+                    cycle_len, unique_cmds, recovery,
+                )
+                await self._execute_cua_action(recovery)
+                await asyncio.sleep(0.5)
+                action_history.append(
+                    f"Step {step+1}: AUTO_RECOVERY {recovery['action_type']} "
+                    f"(broke {cycle_len}-cycle)"
+                )
+                continue
 
             forbidden_note = ""
             if forbidden_actions:
@@ -240,14 +303,37 @@ class PreActAndroidAgent:
                 ui_elements=ui_text,
             ) + stuck_warning + no_effect_note
 
-            # Call LLM with vision
+            # Call LLM with vision — pass BOTH raw and annotated (M3A style)
             try:
                 response = await self.llm.complete_with_vision(
-                    prompt, [screenshot], system=SYSTEM_PROMPT_CUA
+                    prompt,
+                    [raw_screenshot, annotated_screenshot],
+                    system=SYSTEM_PROMPT_CUA,
                 )
             except Exception as e:
                 logger.warning("LLM call failed at step %d: %s", step + 1, e)
                 continue
+
+            # Persist trajectory for offline diagnosis
+            traj_dir = getattr(self, "_trajectory_dir", None)
+            if traj_dir:
+                try:
+                    import os
+                    os.makedirs(traj_dir, exist_ok=True)
+                    base = os.path.join(traj_dir, f"step{step+1:02d}")
+                    with open(base + "_raw.png", "wb") as f:
+                        f.write(raw_screenshot)
+                    with open(base + "_som.png", "wb") as f:
+                        f.write(annotated_screenshot)
+                    with open(base + ".txt", "w") as f:
+                        f.write("=== UI ELEMENTS ===\n")
+                        f.write(ui_text + "\n\n")
+                        f.write("=== PROMPT ===\n")
+                        f.write(prompt + "\n\n")
+                        f.write("=== RESPONSE ===\n")
+                        f.write(response + "\n")
+                except Exception as e:
+                    logger.warning("trajectory dump failed: %s", e)
 
             # Parse action
             action_dict = self._parse_action(response)
@@ -293,10 +379,15 @@ class PreActAndroidAgent:
                 # Don't execute, just record
                 continue
 
-            # Execute action via environment adapter
+            # Stash before-state for post-action summarization (M3A pattern).
+            before_ui_text = ui_text
+            before_screenshot = raw_screenshot
+
+            # Execute action via environment adapter.
+            # M3A uses wait_after_action_seconds=2.0 — match that for UI stabilization.
             try:
                 await self._execute_cua_action(action_dict)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(2.0)
             except Exception as e:
                 logger.warning("Action execution failed: %s", e)
                 action_history.append(f"Step {step+1}: {action_type} FAILED: {e}")
@@ -315,7 +406,38 @@ class PreActAndroidAgent:
                 action_detail = f"open_app \"{action_dict.get('app_name', '')}\""
             elif action_type == "scroll":
                 action_detail = f"scroll {action_dict.get('direction', 'down')}"
-            action_history.append(f"Step {step+1}: {action_detail}")
+
+            # M3A-style post-action summarization: compare before/after and
+            # describe what actually changed. Skip terminal / content-free types.
+            summary = ""
+            if action_type not in ("status", "answer", "open_app", "wait"):
+                try:
+                    after_ui_text = self.env.get_ui_elements_text()
+                    after_screenshot = await self.env.screenshot()
+                    reason_match = re.search(r"Reason:\s*(.+)", response)
+                    reason_text = reason_match.group(1).strip() if reason_match else ""
+                    summary_prompt = USER_PROMPT_SUMMARY.format(
+                        goal=goal,
+                        action=json.dumps(action_dict),
+                        reason=reason_text,
+                        before_elements=before_ui_text,
+                        after_elements=after_ui_text,
+                    )
+                    summary_resp = await self.llm.complete_with_vision(
+                        summary_prompt,
+                        [before_screenshot, after_screenshot],
+                        system=SYSTEM_PROMPT_SUMMARY,
+                        max_tokens=200,
+                    )
+                    summary = (summary_resp or "").strip().replace("\n", " ")
+                except Exception as e:
+                    logger.warning("Summary LLM call failed: %s", e)
+                    summary = ""
+
+            if summary:
+                action_history.append(f"Step {step+1}: {action_detail} — {summary}")
+            else:
+                action_history.append(f"Step {step+1}: {action_detail}")
 
         # Max steps reached
         logger.info("CUA: max steps reached")
@@ -327,6 +449,36 @@ class PreActAndroidAgent:
             actions_via_cua=self.max_cua_steps,
             step_data=step_data,
             error="Max steps reached",
+        )
+
+    async def _execute_with_t3a(self, goal: str) -> AndroidTaskResult:
+        """Delegate CUA to the ported T3A agent (exact SOTA baseline).
+
+        Mirrors `android_world.agents.t3a.T3A` verbatim — same prompts,
+        same step control flow. Used when `use_official_t3a=True`.
+        """
+        from preact.platforms.android.t3a_cua import T3AClaudeCUA
+
+        logger.info("Running T3A CUA for: %s", goal[:80])
+        cua = T3AClaudeCUA()
+        result = await cua.run(goal, self.env, max_steps=self.max_cua_steps)
+
+        # Record tokens onto llm so the outer `execute_task` picks them
+        # up without a schema change. (Additive — doesn't clobber RPA
+        # calls' token counts.)
+        if hasattr(self.llm, "_total_tokens"):
+            self.llm._total_tokens = (
+                getattr(self.llm, "_total_tokens", 0) + cua.total_tokens
+            )
+
+        return AndroidTaskResult(
+            success=result["success"],
+            mode="cua",
+            answer=result.get("answer", ""),
+            actions_executed=result["step_count"],
+            actions_via_cua=result["step_count"],
+            step_data=result["step_data"],
+            error=result.get("error"),
         )
 
     async def _execute_with_rpa(
@@ -351,6 +503,37 @@ class PreActAndroidAgent:
         if not current_state:
             logger.error("Program has no initial state")
             return await self._execute_with_cua(goal)
+
+        # Pre-launch app if the program's first transition targets a package
+        # but doesn't start with action_navigate. Most stored programs were
+        # compiled from traces that opened the app via open_app in step 0 —
+        # but the compiler often drops that step, leaving an initial-state
+        # selector that can only match once the app is already foregrounded.
+        pkg_to_app_name = {
+            "com.google.android.contacts": "Contacts",
+            "com.google.android.deskclock": "Clock",
+            "com.android.camera2": "Camera",
+            "com.dimowner.audiorecorder": "Audio Recorder",
+            "net.gsantner.markor": "Markor",
+            "com.android.chrome": "Chrome",
+            "com.android.documentsui": "Files",
+        }
+        first_trans_list = program.get_transitions_from(current_state.id)
+        if first_trans_list:
+            first_act = first_trans_list[0].action
+            first_act_type = getattr(first_act, "type", None)
+            fat_val = getattr(first_act_type, "value", first_act_type)
+            if fat_val != "action_navigate":
+                target = (getattr(first_act, "target", "") or "") or (current_state.verification.xpath or "")
+                for pkg, app_name in pkg_to_app_name.items():
+                    if pkg in target:
+                        logger.info("Pre-launching %s (from pkg %s) before RPA replay", app_name, pkg)
+                        try:
+                            await self.env.navigate(app_name)
+                            await asyncio.sleep(1.5)
+                        except Exception as e:
+                            logger.warning("Pre-launch failed: %s", e)
+                        break
 
         actions_rpa = 0
         actions_cua = 0
@@ -377,8 +560,20 @@ class PreActAndroidAgent:
                     graph_coverage=1.0,
                 )
 
+            # Skip verification of the FIRST state if its outgoing action
+            # is action_navigate (open_app) — the app isn't open yet, so any
+            # in-app selector will fail and cause spurious fallback to CUA.
+            is_first_state = (iteration == 0)
+            first_trans = program.get_transitions_from(current_state.id)
+            skip_verify = False
+            if is_first_state and first_trans:
+                fat = getattr(first_trans[0].action, "type", None)
+                fat_val = getattr(fat, "value", fat)
+                if fat_val == "action_navigate":
+                    skip_verify = True
+
             # Verify current state
-            if current_state.verification.type == VerificationType.EXPECT_ELEMENT:
+            if current_state.verification.type == VerificationType.EXPECT_ELEMENT and not skip_verify:
                 selector = current_state.verification.xpath
                 if selector:
                     # Resolve parameters in selector
@@ -635,28 +830,17 @@ class PreActAndroidAgent:
             target = target.replace(f"${{{param_name}}}", str(param_value))
         return target
 
-    async def compile_and_store(
+    async def compile(
         self,
         goal: str,
         step_data: list[dict],
         app_context: str = "",
-    ) -> Optional[str]:
-        """Compile CUA steps into a program and store in RAG.
-
-        Args:
-            goal: Task description.
-            step_data: Recorded step data from CUA execution.
-            app_context: App package or name.
-
-        Returns:
-            Program ID if successfully compiled and stored.
-        """
-        if not step_data or not self.store:
+    ) -> Optional[RPAProgram]:
+        """Compile CUA steps into an RPAProgram (does NOT store)."""
+        if not step_data:
             return None
 
-        # Format trace for compilation
         trace_text = format_trace_for_compilation(step_data)
-
         user_prompt = USER_PROMPT_COMPILE.format(trace_text=trace_text)
 
         try:
@@ -664,22 +848,49 @@ class PreActAndroidAgent:
                 messages=[{"role": "user", "content": user_prompt}],
                 system=SYSTEM_PROMPT_COMPILE,
             )
-
             program = self._parse_program(response, goal, app_context)
             if program:
-                program_id = await self.store.store(program)
-                logger.info(
-                    "Compiled and stored program: %s (%d states, %d transitions)",
-                    program_id[:8],
-                    len(program.states),
-                    len(program.transitions),
-                )
-                return program_id
-
+                from preact.rag.compile_utils import sanitize_literals
+                program = sanitize_literals(program, goal)
+            return program
         except Exception as e:
             logger.warning("Compilation failed: %s", e)
+            return None
 
-        return None
+    async def store_program(self, program: RPAProgram) -> Optional[str]:
+        if not self.store:
+            return None
+        program_id = await self.store.store(program, platform="android")
+        logger.info(
+            "Stored program: %s (%d states, %d transitions)",
+            program_id[:8],
+            len(program.states),
+            len(program.transitions),
+        )
+        return program_id
+
+    async def replay_program(
+        self,
+        goal: str,
+        program: RPAProgram,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> AndroidTaskResult:
+        """Replay a compiled program. Used by pre-store verification."""
+        if parameters is None:
+            parameters = self._extract_parameters(goal, program.metadata.parameters)
+        return await self._execute_with_rpa(goal, program, parameters)
+
+    async def compile_and_store(
+        self,
+        goal: str,
+        step_data: list[dict],
+        app_context: str = "",
+    ) -> Optional[str]:
+        """Legacy one-shot compile+store, kept for callers that don't verify."""
+        program = await self.compile(goal, step_data, app_context)
+        if not program:
+            return None
+        return await self.store_program(program)
 
     def _parse_program(
         self, response: str, goal: str, app_context: str
@@ -701,7 +912,7 @@ class PreActAndroidAgent:
             data["metadata"] = {}
 
         metadata = data["metadata"]
-        metadata.setdefault("task_description", goal)
+        metadata["task_description"] = goal
         metadata.setdefault("application_context", app_context)
 
         # Clean up human_interventions

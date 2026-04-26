@@ -1,7 +1,9 @@
-"""RAG-indexed program store using ChromaDB.
+"""Durable program store.
 
-Stores compiled RPA programs with vector embeddings for semantic retrieval.
-Programs are indexed by task description, app context, and parameters.
+Stores compiled RPA programs as JSON documents in ChromaDB's K/V layer.
+Retrieval is agentic (see preact.rag.selector) — there is no vector
+search, no keyword matching, no rule-based scoring here. The store
+just persists programs and exposes a flat listing + direct-by-id load.
 """
 
 from __future__ import annotations
@@ -15,8 +17,43 @@ import chromadb
 from chromadb.config import Settings
 
 from preact.config import RAGConfig
-from preact.rag.embeddings import EmbeddingGenerator, program_to_embedding_text
 from preact.schemas import RPAProgram
+
+
+_PARAM_PATTERNS = [
+    # ISO-like dates with separators: 2026-04-19, 2026_04_19, optionally
+    # followed by _HH:MM:SS / _HH-MM-SS / THH:MM:SS.
+    (r"(?<!\d)\d{4}[-_]\d{2}[-_]\d{2}(?:[_T]\d{2}[-_:]\d{2}(?::\d{2})?)?(?!\d)", "TIMESTAMP"),
+    # Compact YYYYMMDD with optional _HHMMSS (e.g. 20260419_083930).
+    (r"(?<!\d)\d{8}(?:_\d{6})?(?!\d)", "TIMESTAMP"),
+    # Compact numeric timestamps (10+ digits — epoch ms etc.).
+    (r"(?<!\d)\d{10,}(?!\d)", "TIMESTAMP"),
+    # UUID-like.
+    (
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        "UUID",
+    ),
+    # Short hex slugs appended right before a known extension (e.g. "_2c5o.md").
+    (r"_[0-9a-z]{4,}(?=\.(?:md|txt|m4a|mp3|mp4|png|jpg|html))", "_SLUG"),
+]
+
+
+def _normalize_for_dedup(text: str) -> str:
+    """Strip dynamic bits from a task description for dedup signatures.
+
+    Re-runs of the same AndroidWorld/OSWorld task often generate fresh
+    timestamps/slugs in the goal string. Two instances of
+    "Create folder_20260419_083930" and "Create folder_20260420_100115"
+    describe the *same* program, so we collapse those patterns before
+    hashing the signature.
+    """
+    import re
+
+    normalized = text
+    for pattern, tag in _PARAM_PATTERNS:
+        normalized = re.sub(pattern, f"<{tag}>", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+    return normalized
 
 if TYPE_CHECKING:
     from preact.llm.client import LLMClient
@@ -25,17 +62,26 @@ logger = logging.getLogger(__name__)
 
 
 class ProgramStore:
-    """ChromaDB-backed store for RPA programs with semantic retrieval.
+    """Durable key/value store for RPA programs, keyed by program_id.
 
-    Programs are stored as JSON documents with vector embeddings
-    derived from their task descriptions and metadata.
+    Backed by ChromaDB's persistent collection — we use it purely as a
+    JSON document store. No embeddings are computed or queried. All
+    program selection is done by an LLM agent that reads program
+    descriptions via `list_programs` and picks one via `load_program`
+    (see preact.rag.selector.ProgramSelector).
     """
 
-    def __init__(self, llm: LLMClient, config: RAGConfig | None = None):
+    def __init__(self, llm: "LLMClient" | None = None, config: RAGConfig | None = None):
         self.config = config or RAGConfig()
-        self.embedder = EmbeddingGenerator(llm)
+        # Kept for backward compat with existing callers; unused here.
+        self._llm = llm
 
-        persist_path = Path(self.config.persist_dir)
+        # RAG_DB_PATH env var lets parallel benchmarks (e.g. Android + OSWorld
+        # multi-seed sweeps running concurrently) point to isolated stores.
+        import os as _os
+        persist_path = Path(
+            _os.environ.get("RAG_DB_PATH") or self.config.persist_dir
+        )
         persist_path.mkdir(parents=True, exist_ok=True)
 
         self._client = chromadb.Client(
@@ -47,191 +93,105 @@ class ProgramStore:
         )
         self._collection = self._client.get_or_create_collection(
             name=self.config.collection_name,
-            metadata={"hnsw:space": "cosine"},
         )
         logger.info(
             "Program store initialized: %d programs",
             self._collection.count(),
         )
 
-    async def store(self, program: RPAProgram) -> str:
-        """Store a compiled RPA program.
+    async def store(self, program: RPAProgram, platform: str = "") -> str:
+        """Persist a compiled RPA program with signature-based dedup.
+
+        The program_id is derived from sha1(platform || normalized
+        task_description). Re-storing the same task (possibly with a
+        fresher timestamp parameter) upserts the same slot — no bloat.
 
         Args:
             program: The RPA program to store.
+            platform: Platform tag ("osworld" | "android" | "web") —
+                scopes the selector so Android never sees OSWorld programs.
 
         Returns:
-            The program_id.
+            program_id (possibly rewritten for dedup).
         """
-        program_id = program.metadata.program_id
-        embedding = await self.embedder.embed_program(program)
+        import hashlib
+
+        signature = (platform or "unknown") + "||" + _normalize_for_dedup(
+            program.metadata.task_description
+        )
+        stable_id = hashlib.sha1(signature.encode("utf-8")).hexdigest()[:24]
+
+        existing = self._collection.get(
+            ids=[stable_id], include=["metadatas"]
+        )
+        prior_version = 1
+        if existing["ids"]:
+            try:
+                prior_version = int(existing["metadatas"][0].get("version", 1)) + 1
+            except Exception:
+                prior_version = 1
+
+        # Rewrite metadata's program_id to match the dedup slot so future
+        # selector lookups are self-consistent.
+        program.metadata.program_id = stable_id
+        program.metadata.version = prior_version
         program_json = program.model_dump_json()
 
         metadata = {
             "task_description": program.metadata.task_description,
             "application_context": program.metadata.application_context,
             "parameters": json.dumps(program.metadata.parameters),
-            "version": program.metadata.version,
+            "version": prior_version,
             "state_count": len(program.states),
             "transition_count": len(program.transitions),
+            "platform": platform or "unknown",
+            "dedup_signature": signature,
         }
 
-        # Upsert to handle updates
         self._collection.upsert(
-            ids=[program_id],
-            embeddings=[embedding],
+            ids=[stable_id],
+            embeddings=[[0.0]],
             documents=[program_json],
             metadatas=[metadata],
         )
 
-        logger.info("Stored program: %s", program_id)
-        return program_id
+        logger.info(
+            "Stored program: %s (v%d%s)",
+            stable_id,
+            prior_version,
+            " — upsert" if existing["ids"] else "",
+        )
+        return stable_id
 
-    async def query(
-        self,
-        task: str,
-        context: str = "",
-        k: int | None = None,
-    ) -> list[RPAProgram]:
-        """Query for matching programs by task description.
+    def list_programs(self, platform: str = "") -> list[dict[str, Any]]:
+        """Return lightweight summaries of all stored programs.
 
-        Uses fast text-matching first (no API call). Falls back to
-        semantic embedding search only when text matching fails.
-
-        Args:
-            task: The task description to search for.
-            context: Optional application context (URL, app name).
-            k: Number of results to return.
-
-        Returns:
-            List of matching RPAPrograms, sorted by relevance.
+        Used by the selector agent to choose a program. The selector sees
+        the task description, application context, and counts — it does
+        NOT see the full JSON until it calls `load_program(id)`.
         """
-        k = k or self.config.top_k
-
         if self._collection.count() == 0:
             return []
-
-        # Fast path: text-based matching (no API call)
-        fast_results = await self._query_by_text(task, context, k)
-        if fast_results:
-            logger.info("Fast text match found %d programs", len(fast_results))
-            return fast_results
-
-        # Slow path: semantic embedding search
-        embedding = await self.embedder.embed_query(task, context)
-
-        # Build where filter for app context if provided
-        where = None
-        if context:
-            where = {"application_context": {"$eq": context}}
-
-        try:
-            results = self._collection.query(
-                query_embeddings=[embedding],
-                n_results=min(k, self._collection.count()),
-                where=where,
-                include=["documents", "distances"],
-            )
-        except Exception:
-            # Retry without where filter if context filter fails
-            results = self._collection.query(
-                query_embeddings=[embedding],
-                n_results=min(k, self._collection.count()),
-                include=["documents", "distances"],
-            )
-
-        programs = []
-        if results["documents"] and results["documents"][0]:
-            for i, doc in enumerate(results["documents"][0]):
-                distance = results["distances"][0][i] if results["distances"] else 1.0
-                similarity = 1 - distance
-                if similarity < self.config.similarity_threshold:
-                    continue
-                try:
-                    program = RPAProgram.model_validate_json(doc)
-                    programs.append(program)
-                except Exception as e:
-                    logger.warning("Failed to deserialize program: %s", e)
-
-        logger.info(
-            "Query '%s': %d results (from %d candidates)",
-            task[:50],
-            len(programs),
-            self._collection.count(),
-        )
-        return programs
-
-    async def _query_by_text(
-        self,
-        task: str,
-        context: str,
-        k: int,
-    ) -> list[RPAProgram]:
-        """Fast text-based matching using keyword overlap.
-
-        Avoids the embedding API call by computing word overlap between
-        the query task and stored program descriptions.
-        """
-        result = self._collection.get(include=["metadatas", "documents"])
-        if not result["documents"]:
-            return []
-
-        task_words = set(task.lower().split())
-        scored = []
-
+        result = self._collection.get(include=["metadatas"])
+        summaries: list[dict[str, Any]] = []
         for i, meta in enumerate(result["metadatas"] or []):
-            desc = meta.get("task_description", "").lower()
-            desc_words = set(desc.split())
-            if not desc_words:
+            if platform and meta.get("platform", "") not in (platform, ""):
                 continue
+            summaries.append(
+                {
+                    "program_id": result["ids"][i],
+                    "task_description": meta.get("task_description", ""),
+                    "application_context": meta.get("application_context", ""),
+                    "platform": meta.get("platform", ""),
+                    "version": meta.get("version", 1),
+                    "state_count": meta.get("state_count", 0),
+                    "transition_count": meta.get("transition_count", 0),
+                }
+            )
+        return summaries
 
-            # Weighted overlap: intersection / min(len) — favors shorter descriptions
-            # that are fully contained in the query
-            overlap = len(task_words & desc_words)
-            min_len = min(len(task_words), len(desc_words))
-            score = overlap / min_len if min_len > 0 else 0
-
-            # Boost for matching app context
-            app_ctx = meta.get("application_context", "")
-            if context and context in app_ctx:
-                score += 0.1
-
-            if score >= 0.4:  # Minimum threshold
-                scored.append((score, i))
-
-        if not scored:
-            return []
-
-        scored.sort(reverse=True)
-        programs = []
-        for score, idx in scored[:k]:
-            try:
-                doc = result["documents"][idx]
-                program = RPAProgram.model_validate_json(doc)
-                programs.append(program)
-            except Exception as e:
-                logger.warning("Failed to deserialize program: %s", e)
-
-        return programs
-
-    async def update(self, program_id: str, program: RPAProgram) -> None:
-        """Update an existing program in the store.
-
-        Used after monotonic graph extension to persist the updated program.
-        """
-        program.metadata.program_id = program_id
-        await self.store(program)
-
-    async def delete(self, program_id: str) -> None:
-        """Delete a program from the store."""
-        try:
-            self._collection.delete(ids=[program_id])
-            logger.info("Deleted program: %s", program_id)
-        except Exception as e:
-            logger.warning("Failed to delete program %s: %s", program_id, e)
-
-    async def get(self, program_id: str) -> RPAProgram | None:
-        """Retrieve a specific program by ID."""
+    async def load_program(self, program_id: str) -> RPAProgram | None:
+        """Fetch a stored program by id. Called by the selector."""
         try:
             result = self._collection.get(
                 ids=[program_id], include=["documents"]
@@ -239,51 +199,23 @@ class ProgramStore:
             if result["documents"] and result["documents"][0]:
                 return RPAProgram.model_validate_json(result["documents"][0])
         except Exception as e:
-            logger.warning("Failed to get program %s: %s", program_id, e)
+            logger.warning("Failed to load program %s: %s", program_id, e)
         return None
 
+    # Backward-compat alias.
+    async def get(self, program_id: str) -> RPAProgram | None:
+        return await self.load_program(program_id)
+
+    async def update(self, program_id: str, program: RPAProgram) -> None:
+        program.metadata.program_id = program_id
+        await self.store(program)
+
+    async def delete(self, program_id: str) -> None:
+        try:
+            self._collection.delete(ids=[program_id])
+            logger.info("Deleted program: %s", program_id)
+        except Exception as e:
+            logger.warning("Failed to delete program %s: %s", program_id, e)
+
     def count(self) -> int:
-        """Return the number of stored programs."""
         return self._collection.count()
-
-    def has_relevant_match(self, task: str, threshold: float = 0.5) -> bool:
-        """Check if there's a relevant program for this task (sync, no API call).
-
-        Uses fast text matching with a higher threshold than query() to avoid
-        wasting time on irrelevant RPA attempts + CUA fallback timeouts.
-        """
-        if self._collection.count() == 0:
-            return False
-
-        task_words = set(task.lower().split())
-        result = self._collection.get(include=["metadatas"])
-
-        for meta in result["metadatas"] or []:
-            desc = meta.get("task_description", "").lower()
-            desc_words = set(desc.split())
-            if not desc_words:
-                continue
-            overlap = len(task_words & desc_words)
-            min_len = min(len(task_words), len(desc_words))
-            score = overlap / min_len if min_len > 0 else 0
-            if score >= threshold:
-                return True
-        return False
-
-    async def list_all(self) -> list[dict[str, Any]]:
-        """List all stored programs with basic metadata."""
-        if self._collection.count() == 0:
-            return []
-        result = self._collection.get(include=["metadatas"])
-        summaries = []
-        for i, meta in enumerate(result["metadatas"] or []):
-            summaries.append(
-                {
-                    "program_id": result["ids"][i],
-                    "task_description": meta.get("task_description", ""),
-                    "application_context": meta.get("application_context", ""),
-                    "version": meta.get("version", 1),
-                    "state_count": meta.get("state_count", 0),
-                }
-            )
-        return summaries

@@ -14,3 +14,22 @@ vendor/
 *.tar
 .auth/
 benchmark/webarena/configs/
+
+# Logs and benchmark output (often very large; per-run artifacts)
+*.log
+android_multiseed/
+benchmark_run*.log
+osworld_*.log
+webarena_*.log
+
+# rag_db backups and snapshots
+rag_db_*/
+chroma_db_*/
+chroma_db_*.sqlite3
+rag_db_*.sqlite3
+*_backup_*/
+trajectories/
+cache/
+
+# Editor / agent caches
+.claude/

@@ -53,12 +53,22 @@ Produce a JSON object with this exact structure:
       "to": "<target_state_id>",
       "action": {
         "type": "<action_type>",
+        "description": "<ONE-SENTENCE natural-language summary — required>",
         ... action-specific fields ...
       }
     }
   ],
   "human_interventions": []
 }
+
+## Natural-language descriptions (REQUIRED)
+
+Every state MUST have a `description` reading like a caption ("LibreOffice
+Calc with cell A1 active", "save-as dialog"). Every transition's action MUST
+have a `description` reading like a caption ("press Ctrl+S to save the
+workbook", "type the filename (parameter `filename`) into the save-as
+field"). These are consumed by a downstream selector agent, so be precise
+and parameter-aware.
 
 ## Rules
 
@@ -109,6 +119,9 @@ is the visible label, and (cx,cy) is the center coordinate.
 Refer to elements by their INDEX. Emit exactly ONE of:
 
 - click(id=N)                        — left-click element N
+  ⚠ `id=N` is an INDEX into the a11y list above, NOT a coordinate.
+    Valid N is 0 ≤ N < list_length. If the number you want is > list_length,
+    you are probably thinking of a coordinate — use raw_click(x, y) instead.
 - double_click(id=N)                 — double-click element N
 - right_click(id=N)                  — right-click element N
 - type(id=N, text="...")             — click N, then type text
@@ -135,11 +148,32 @@ Prefer id=N always. raw_click is a last resort (e.g. empty a11y tree).
 
 ## RULES
 - Output EXACTLY ONE action on ONE line. No code fences, no reasoning.
+- Your FIRST TOKEN must be one of: click, double_click, right_click, type,
+  key, hotkey, scroll, drag, wait, raw_click, raw_double_click,
+  raw_right_click, raw_move, DONE, FAIL, ANSWER. Do NOT start the response
+  with "Looking", "I need", "Let me", "First", or any explanatory prose —
+  the parser only accepts an action token as the leading line.
 - Do NOT repeat the same action. If the screen did not change after your last
   action, that action did not work — try a DIFFERENT element or approach
   (scroll, a keyboard shortcut, a different click target, Escape, etc.).
 - Only use raw_click / raw_coordinates when the a11y tree is empty or does
   not contain the element you need.
+- After selecting an item in a dialog (row, radio, checkbox), look for a
+  "Set as default", "OK", "Apply", "Save", or "Confirm" button — selecting a
+  row alone rarely commits the change. If you just clicked a list item and
+  the dialog is still open, your NEXT action should usually be the confirm
+  button, not a re-click of the same item.
+- For tasks that require reaching a specific settings page, typing the URL
+  directly into the address bar (e.g. `chrome://settings/searchEngines`) is
+  faster than menu navigation. Use click(id=<address-bar>) then
+  type(text="chrome://...") then key(enter).
+
+## VISUAL INDEX ANNOTATION (IMPORTANT)
+The screenshot has THIN RED BOXES drawn around every a11y element. Each box
+has a small BLACK label in its lower-left corner showing the element's index
+number — this number IS the `id=N` you must use in click(id=N). Verify the
+target is the box you see. If the index you want does not have a visible box
+on the screen, it is probably off-screen — scroll first.
 
 ## WORKED EXAMPLE
 
@@ -188,6 +222,13 @@ def format_os_trace(steps: list[dict]) -> str:
 
         if step.get("window_title"):
             parts.append(f"window={step['window_title']}")
+
+        # Raw pyautogui command (single line, 160-char cap) — preserves the
+        # exact keystroke detail (Ctrl+S, Enter-commit, etc.) that compile
+        # into semantic `action_keypress` tends to drop.
+        cmd = (step.get("command") or "").replace("\n", "; ").strip()
+        if cmd:
+            parts.append(f"cmd={cmd[:160]}")
 
         lines.append(" | ".join(parts))
 

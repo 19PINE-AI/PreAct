@@ -96,6 +96,12 @@ class ActionSpec(BaseModel):
     false_steps: list[ActionSpec] | None = None  # For condition branching
     from_target: str | None = None  # For drag
     to_target: str | None = None  # For drag
+    # Raw command fallback — verbatim pyautogui string captured during CUA
+    # recording. Replayed when the semantic action (click/type/scroll)
+    # fails or drops low-level detail (e.g. keystroke combos the compiler
+    # collapses into a single semantic step). Platform-specific: unused on
+    # Android since JSONAction is already low-level.
+    raw_command: str | None = None
     # Human intervention fields
     intervention_type: InterventionType | None = None
     timeout_sec: int | None = None

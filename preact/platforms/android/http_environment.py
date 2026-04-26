@@ -197,10 +197,40 @@ def _find_element(elements: list[HTTPUIElement], selector: str) -> Optional[HTTP
     return None
 
 
+def _is_interactable(elem: HTTPUIElement) -> bool:
+    """Matches M3A's coverage: clickable, editable, scrollable, focusable, or checkable."""
+    return bool(
+        elem.is_clickable
+        or elem.is_editable
+        or elem.is_scrollable
+        or elem.is_focused
+        or elem.is_checked
+    )
+
+
+def _validate_element(elem: HTTPUIElement) -> bool:
+    """Analog of M3A's validate_ui_element: visible + valid bbox."""
+    if elem.is_visible is False:
+        return False
+    if elem.bbox_x_min is None or elem.bbox_y_min is None:
+        return False
+    if elem.bbox_x_max is None or elem.bbox_y_max is None:
+        return False
+    if elem.bbox_x_min >= elem.bbox_x_max or elem.bbox_y_min >= elem.bbox_y_max:
+        return False
+    return True
+
+
 def _elements_to_text(elements: list[HTTPUIElement]) -> str:
-    """Format UI elements as text for LLM prompts."""
+    """Format UI elements as text for LLM prompts.
+
+    Only show indices that are also drawn on the annotated screenshot —
+    otherwise the LLM sees indices in text with no matching visible box.
+    """
     lines = []
     for elem in elements:
+        if not _validate_element(elem):
+            continue
         parts = [f"[{elem.index}]"]
         if elem.class_name:
             parts.append(elem.class_name.split(".")[-1])
@@ -303,9 +333,20 @@ class AndroidHTTPEnvironment:
         pass
 
     async def reset(self) -> None:
-        self._post("/reset", {"go_home": "true"})
-        self._last_elements = []
-        self._last_screenshot_b64 = None
+        # Emulator reset occasionally stalls under load (shared KVM with the
+        # OSWorld containers); retry with longer timeouts instead of crashing.
+        last_err: Exception | None = None
+        for timeout_s in (30, 60, 120):
+            try:
+                self._post("/reset", {"go_home": "true"}, timeout=timeout_s)
+                self._last_elements = []
+                self._last_screenshot_b64 = None
+                return
+            except Exception as e:
+                last_err = e
+                logger.warning("env.reset timed out after %ds; retrying", timeout_s)
+                time.sleep(5)
+        raise RuntimeError(f"env.reset failed after retries: {last_err}")
 
     # ─── Observation ──────────────────────────────────────────────────────
 
@@ -333,6 +374,48 @@ class AndroidHTTPEnvironment:
             return base64.b64decode(b64_fb)
         except Exception as e:
             raise RuntimeError(f"screenshot: all capture paths failed: {e}") from e
+
+    async def annotated_screenshot(self) -> bytes:
+        """Screenshot with Set-of-Marks overlay: numbered boxes per element.
+
+        Helps the LLM correlate visual position with element index, which
+        the raw a11y-index approach struggles with (LLM repeatedly picks
+        wrong index for visually-identified elements).
+        """
+        png = await self.screenshot()
+        if not self._last_elements:
+            self._get_state()
+        elements = self._last_elements
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except ImportError:
+            return png
+        try:
+            img = Image.open(io.BytesIO(png)).convert("RGB")
+        except Exception as e:
+            logger.warning("annotated_screenshot: PIL open failed: %s", e)
+            return png
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+        except Exception:
+            font = ImageFont.load_default()
+        # Match M3A exactly: green rectangle (0,255,0), white index label with
+        # black text at TOP-LEFT corner. Drawing for every validated element
+        # keeps the drawn-index set identical to the text-list index set.
+        for el in elements:
+            if not _validate_element(el):
+                continue
+            x0, y0 = el.bbox_x_min, el.bbox_y_min
+            x1, y1 = el.bbox_x_max, el.bbox_y_max
+            draw.rectangle([x0, y0, x1, y1], outline=(0, 200, 0), width=2)
+            label = str(el.index)
+            lw = max(24, 11 * len(label) + 6)
+            draw.rectangle([x0, y0, x0 + lw, y0 + 26], fill=(255, 255, 255))
+            draw.text((x0 + 3, y0 + 1), label, fill=(0, 0, 0), font=font)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
 
     async def element_exists(self, selector: str, timeout_ms: int = 5000) -> bool:
         """Check if element exists, polling until timeout.
@@ -450,7 +533,7 @@ class AndroidHTTPEnvironment:
         if elem and elem.center_x is not None:
             self._exec_action({"action_type": "click", "x": elem.center_x, "y": elem.center_y})
             await asyncio.sleep(0.3)
-            self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            self._exec_action({"action_type": "input_text", "text": text})
             await asyncio.sleep(0.3)
             return
 
@@ -458,12 +541,12 @@ class AndroidHTTPEnvironment:
         if coords:
             self._exec_action({"action_type": "click", "x": coords[0], "y": coords[1]})
             await asyncio.sleep(0.3)
-            self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            self._exec_action({"action_type": "input_text", "text": text})
             await asyncio.sleep(0.3)
             return
 
         if selector == "":
-            self._exec_action({"action_type": "input_text", "text": text, "clear_text": True})
+            self._exec_action({"action_type": "input_text", "text": text})
             await asyncio.sleep(0.3)
             return
 
@@ -507,7 +590,7 @@ class AndroidHTTPEnvironment:
             if elem and elem.center_x is not None:
                 self._exec_action({"action_type": "click", "x": elem.center_x, "y": elem.center_y})
                 await asyncio.sleep(0.2)
-        self._exec_action({"action_type": "input_text", "text": "", "clear_text": True})
+        self._exec_action({"action_type": "input_text", "text": ""})
         await asyncio.sleep(0.2)
 
     async def long_press(self, selector_or_coords, duration_ms: int = 800) -> None:
@@ -533,16 +616,15 @@ class AndroidHTTPEnvironment:
             raise ValueError(
                 f"long_press: could not resolve coordinates from {selector_or_coords!r}"
             )
+        if index is not None:
+            payload: dict[str, Any] = {"action_type": "long_press", "index": index}
+        else:
+            payload = {"action_type": "long_press", "x": x, "y": y}
         try:
-            payload: dict[str, Any] = {"action_type": "long_press", "x": x, "y": y}
-            if index is not None:
-                payload["index"] = index
             self._exec_action(payload)
         except Exception as e:
-            logger.info("long_press native action failed (%s); falling back", e)
-            self._exec_action({"action_type": "click", "x": x, "y": y})
-            await asyncio.sleep(duration_ms / 1000.0)
-            self._exec_action({"action_type": "click", "x": x, "y": y})
+            logger.info("long_press by index failed (%s); retrying with coords", e)
+            self._exec_action({"action_type": "long_press", "x": x, "y": y})
         await asyncio.sleep(0.3)
 
     async def press_key(self, key: str) -> None:
@@ -594,6 +676,15 @@ class AndroidHTTPEnvironment:
     def get_task_score(self, task_type: str, task_idx: int) -> float:
         data = self._get("/task/score", {"task_type": task_type, "task_idx": task_idx})
         return float(data.get("score", 0.0))
+
+    def get_task_complexity(self, task_type: str, task_idx: int) -> float:
+        """Return per-task complexity (T3A SOTA uses budget = int(10 * complexity))."""
+        try:
+            data = self._post("/task/complexity", {"task_type": task_type, "task_idx": task_idx})
+            return float(data.get("complexity", 1.0))
+        except Exception as e:
+            logger.warning("get_task_complexity(%s) failed: %s", task_type, e)
+            return 1.0
 
     def tear_down_task(self, task_type: str, task_idx: int) -> None:
         self._post("/task/tear_down", {"task_type": task_type, "task_idx": task_idx})

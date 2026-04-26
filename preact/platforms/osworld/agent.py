@@ -53,6 +53,7 @@ class OSTaskResult:
     program_was_new: bool = False
     total_time_ms: float = 0
     total_tokens: int = 0
+    cua_tokens: int = 0
     actions_executed: int = 0
     actions_via_rpa: int = 0
     actions_via_cua: int = 0
@@ -76,11 +77,19 @@ class PreActOSAgent:
         llm: LLMClient,
         store: Optional[ProgramStore] = None,
         max_cua_steps: int = 15,
+        cua_backend: str = "claude_cu",
     ):
         self.env = env
         self.llm = llm
         self.store = store
         self.max_cua_steps = max_cua_steps
+        # "claude_cu" = native Anthropic Computer Use beta tool (SOTA recipe)
+        # "legacy_a11y" = numbered a11y-tree + semantic action parser
+        self.cua_backend = cua_backend
+        # Agentic selector — reads program descriptions and picks one via
+        # tool-calling. Replaces the prior keyword/embedding RAG.
+        from preact.rag.selector import ProgramSelector
+        self.selector = ProgramSelector(llm, store) if store else None
 
     async def execute_task(
         self,
@@ -92,24 +101,19 @@ class PreActOSAgent:
         start_time = time.time()
         self.llm.reset_usage()
 
-        # Step 1: Check RAG
+        # Step 1: Let the selector agent pick a program by description.
         program = None
-        if not force_cua and self.store:
+        if not force_cua and self.selector:
             try:
-                matches = await self.store.query(instruction, k=1)
-                if matches:
-                    program = matches[0]
-                    logger.info(
-                        "Found matching program: %s (%d states)",
-                        program.metadata.program_id[:8],
-                        len(program.states),
+                program = await self.selector.select(
+                    task=instruction, platform="osworld"
+                )
+                if program and not parameters:
+                    parameters = self._extract_parameters(
+                        instruction, program.metadata.parameters
                     )
-                    if not parameters:
-                        parameters = self._extract_parameters(
-                            instruction, program.metadata.parameters
-                        )
             except Exception as e:
-                logger.warning("RAG lookup failed: %s", e)
+                logger.warning("Selector failed: %s", e)
 
         # Step 2: Execute
         if program:
@@ -118,10 +122,20 @@ class PreActOSAgent:
             result = await self._execute_with_cua(instruction)
 
         result.total_time_ms = (time.time() - start_time) * 1000
-        result.total_tokens = self.llm.total_tokens
+        result.total_tokens = self.llm.total_tokens + getattr(result, "cua_tokens", 0)
         return result
 
     async def _execute_with_cua(self, instruction: str) -> OSTaskResult:
+        """Dispatch to the configured CUA backend."""
+        if self.cua_backend == "claude_cu":
+            from preact.platforms.osworld.claude_cua import ClaudeComputerUseCUA
+            cua = ClaudeComputerUseCUA()
+            result = await cua.run(instruction, self.env, max_steps=self.max_cua_steps)
+            result.cua_tokens = cua.total_tokens
+            return result
+        return await self._execute_with_cua_legacy(instruction)
+
+    async def _execute_with_cua_legacy(self, instruction: str) -> OSTaskResult:
         """Execute task using CUA (LLM + semantic action vocabulary).
 
         Bug fixes in this method:
@@ -144,10 +158,18 @@ class PreActOSAgent:
         forbidden_actions: dict[str, int] = {}
 
         for step in range(self.max_cua_steps):
-            # Get current state
-            screenshot = await self.env.screenshot()
+            # Get current state — a11y must be fetched first so annotated
+            # screenshot uses the same element indices the LLM will see.
             elements = self.env._get_a11y_elements()
             a11y_text = self.env.get_a11y_elements_text()
+            if hasattr(self.env, "annotated_screenshot"):
+                try:
+                    screenshot = await self.env.annotated_screenshot()
+                except Exception as e:
+                    logger.warning("annotated_screenshot failed: %s; raw", e)
+                    screenshot = await self.env.screenshot()
+            else:
+                screenshot = await self.env.screenshot()
 
             # Track screenshot hash (Bug 6)
             screenshot_hash = (
@@ -158,48 +180,72 @@ class PreActOSAgent:
             # Format history
             history_text = "\n".join(action_history[-5:]) if action_history else "None"
 
-            # Detect repeated actions (stuck detection — command-string check)
+            # Detect stuck loops — covers (a) A A A, (b) A B A B oscillation,
+            # (c) A B C A B C 3-cycle. The oscillation cases are the ones
+            # that matter in practice: the LLM picks id=X and id=Y alternately,
+            # which the old "3 consecutive identical" check never caught.
             stuck_warning = ""
-            if len(action_history) >= 2:
-                recent_cmds = []
-                for h in action_history[-3:]:
-                    parts = h.split(": ", 1)
-                    recent_cmds.append(parts[1] if len(parts) > 1 else h)
-                if len(set(recent_cmds)) == 1 and len(recent_cmds) >= 2:
-                    stuck_count = 0
-                    last_cmd = recent_cmds[-1]
-                    for h in reversed(action_history):
-                        parts = h.split(": ", 1)
-                        cmd = parts[1] if len(parts) > 1 else h
-                        if cmd == last_cmd:
-                            stuck_count += 1
-                        else:
-                            break
-                    if stuck_count >= 3:
-                        forbidden_actions[last_cmd] = forbidden_actions.get(last_cmd, 0) + stuck_count
-                        # Force auto-recovery
-                        recovery_actions = [
-                            "import pyautogui; pyautogui.scroll(-3)",
-                            "import pyautogui; pyautogui.press('escape')",
-                            "import pyautogui; pyautogui.hotkey('alt', 'left')",
-                        ]
-                        recovery = recovery_actions[stuck_count % len(recovery_actions)]
-                        logger.info("Auto-recovery (stuck %d times): %s", stuck_count, recovery)
-                        self.env._exec_pyautogui(recovery)
-                        await asyncio.sleep(0.5)
-                        action_history.append(f"Step {step+1}: AUTO_RECOVERY {recovery}")
-                        continue
-                    stuck_warning = (
-                        "\n\nWARNING: You have repeated the SAME action "
-                        f"{stuck_count} times and the screen has NOT changed. "
-                        "Your clicks are NOT working. You MUST try something "
-                        "COMPLETELY DIFFERENT:\n"
-                        "- Try scrolling down to reveal more content\n"
-                        "- Try using a keyboard shortcut instead of clicking\n"
-                        "- Try clicking on a DIFFERENT element\n"
-                        "- Try pressing Escape or navigating back\n"
-                        "- Try a totally different approach to the task"
-                    )
+            cmds_hist = [
+                h.split(": ", 1)[1] if ": " in h else h
+                for h in action_history
+            ]
+            cycle_info = None
+            if len(cmds_hist) >= 3 and cmds_hist[-1] == cmds_hist[-2] == cmds_hist[-3]:
+                cycle_info = (1, [cmds_hist[-1]])
+            elif (
+                len(cmds_hist) >= 4
+                and cmds_hist[-1] == cmds_hist[-3]
+                and cmds_hist[-2] == cmds_hist[-4]
+                and cmds_hist[-1] != cmds_hist[-2]
+            ):
+                cycle_info = (2, [cmds_hist[-2], cmds_hist[-1]])
+            elif (
+                len(cmds_hist) >= 6
+                and cmds_hist[-1] == cmds_hist[-4]
+                and cmds_hist[-2] == cmds_hist[-5]
+                and cmds_hist[-3] == cmds_hist[-6]
+                and len({cmds_hist[-1], cmds_hist[-2], cmds_hist[-3]}) == 3
+            ):
+                cycle_info = (3, [cmds_hist[-3], cmds_hist[-2], cmds_hist[-1]])
+            # Guard: only apply the UI-hash identity check to MULTI-step
+            # cycles (ABAB digit-entry made real progress). For a pure
+            # 1-cycle (AAA) — same action emitted N times — always flag it
+            # as stuck: same action + no progress is stuck regardless of
+            # minor screen animation. Otherwise dynamic pages (loading
+            # spinners, focus rings) would silence legit stuck detection.
+            if cycle_info is not None and cycle_info[0] >= 2 and len(screenshot_hashes) >= 2:
+                cl = cycle_info[0]
+                needed = cl * 2
+                if len(screenshot_hashes) >= needed:
+                    tail = screenshot_hashes[-needed:]
+                    first, second = tail[:cl], tail[cl:]
+                    if any(
+                        h1 and h2 and h1 != h2
+                        for h1, h2 in zip(first, second)
+                    ):
+                        cycle_info = None
+            if cycle_info is not None:
+                cycle_len, unique_cmds = cycle_info
+                for cmd in unique_cmds:
+                    forbidden_actions[cmd] = forbidden_actions.get(cmd, 0) + 1
+                recovery_actions = [
+                    "import pyautogui; pyautogui.scroll(-3)",
+                    "import pyautogui; pyautogui.press('escape')",
+                    "import pyautogui; pyautogui.hotkey('alt', 'left')",
+                    "import pyautogui; pyautogui.press('f5')",
+                ]
+                total = sum(forbidden_actions.values())
+                recovery = recovery_actions[total % len(recovery_actions)]
+                logger.info(
+                    "Stuck (cycle_len=%d, cmds=%s) — recovery: %s",
+                    cycle_len, unique_cmds, recovery,
+                )
+                self.env._exec_pyautogui(recovery)
+                await asyncio.sleep(0.5)
+                action_history.append(
+                    f"Step {step+1}: AUTO_RECOVERY {recovery} (broke {cycle_len}-cycle)"
+                )
+                continue
 
             # Screenshot-hash-based stuck detection (Bug 6)
             screen_unchanged_note = ""
@@ -224,12 +270,19 @@ class PreActOSAgent:
 
             forbidden_note = ""
             forbidden_ids: set[str] = set()
+            forbidden_coords: set[tuple[int, int]] = set()
             if forbidden_actions:
-                # Extract forbidden element IDs from "click(id=N)" patterns
+                # Forbidden entries look like "[semantic:click] click(956,90)".
+                # Extract both id=N patterns AND the resolved (cx,cy) — the
+                # latter is what catches the "many different ids all hit the
+                # same spot" stuck-click pattern.
                 for cmd in forbidden_actions:
                     m = re.search(r"id=(\d+)", cmd)
                     if m:
                         forbidden_ids.add(m.group(1))
+                    m = re.search(r"\((-?\d+)\s*,\s*(-?\d+)\)", cmd)
+                    if m:
+                        forbidden_coords.add((int(m.group(1)), int(m.group(2))))
                 items = "\n".join(
                     f"  - {cmd} (ineffective after {n} tries)"
                     for cmd, n in sorted(
@@ -242,12 +295,29 @@ class PreActOSAgent:
                     + items
                     + "\n\n"
                 )
-            # Mark forbidden ids in the a11y listing so LLM sees them inline
+            # Mark forbidden ids in the a11y listing so LLM sees them inline.
+            # Also mark any element whose center is within ~12px of a
+            # forbidden coord — catches the "list reshuffled, same spot,
+            # different id" case that otherwise evades the per-id ban.
             a11y_shown = a11y_text[:12000]
-            if forbidden_ids:
+            if forbidden_ids or forbidden_coords:
+                marked_indices: set[int] = set()
+                if forbidden_coords:
+                    for i, e in enumerate(elements):
+                        cx = e.get("x", 0) + e.get("width", 0) // 2
+                        cy = e.get("y", 0) + e.get("height", 0) // 2
+                        for fx, fy in forbidden_coords:
+                            if abs(cx - fx) <= 12 and abs(cy - fy) <= 12:
+                                marked_indices.add(i)
+                                break
                 for fid in forbidden_ids:
+                    try:
+                        marked_indices.add(int(fid))
+                    except ValueError:
+                        pass
+                for idx in sorted(marked_indices, reverse=True):
                     a11y_shown = a11y_shown.replace(
-                        f"[{fid}]", f"[{fid}-FORBIDDEN]"
+                        f"[{idx}]", f"[{idx}-FORBIDDEN]"
                     )
 
             # Build prompt (Bug 4: cap 12000). Forbidden-note goes FIRST so
@@ -260,10 +330,15 @@ class PreActOSAgent:
                 a11y_elements=a11y_shown,
             ) + stuck_warning + screen_unchanged_note + empty_a11y_note
 
-            # Call LLM with vision
+            # Call LLM with vision. Cap max_tokens=600: high enough that
+            # Claude can emit a reasoning preamble AND the action line
+            # (parser scans all lines for the action), low enough to stay
+            # cheap and fast. max_tokens=300 truncated preambles mid-
+            # sentence before the action.
             try:
                 response = await self.llm.complete_with_vision(
-                    prompt, [screenshot], system=SYSTEM_PROMPT_CUA
+                    prompt, [screenshot], system=SYSTEM_PROMPT_CUA,
+                    max_tokens=600,
                 )
             except Exception as e:
                 logger.warning("LLM call failed at step %d: %s", step + 1, e)
@@ -272,6 +347,21 @@ class PreActOSAgent:
 
             response = response.strip()
             logger.info("Step %d: %s", step + 1, response[:100])
+
+            traj_dir = getattr(self, "_trajectory_dir", None)
+            if traj_dir:
+                import os as _os
+                _os.makedirs(traj_dir, exist_ok=True)
+                base = _os.path.join(traj_dir, f"step{step+1:02d}")
+                try:
+                    with open(base + ".png", "wb") as _f:
+                        _f.write(screenshot)
+                    with open(base + ".txt", "w") as _f:
+                        _f.write("=== A11Y ===\n" + a11y_text + "\n\n")
+                        _f.write("=== PROMPT ===\n" + prompt + "\n\n")
+                        _f.write("=== RESPONSE ===\n" + response + "\n")
+                except Exception as _e:
+                    logger.warning("trajectory dump failed: %s", _e)
 
             # Handle terminal responses
             if response.upper() == "DONE":
@@ -319,6 +409,14 @@ class PreActOSAgent:
                 # Selector/index not found — surface into history so the LLM sees it
                 logger.warning("Action unresolved at step %d: %s", step + 1, e)
                 action_history.append(f"Step {step+1}: UNRESOLVED: {e}")
+                # Ban the invalid id so the LLM can't re-emit it forever.
+                # The cycle detector only fires after an ABAB pattern (4
+                # steps wasted); immediate banning prevents the repeat.
+                m_bad = re.search(r"id=(\d+)", response)
+                if m_bad:
+                    forbidden_actions[f"id={m_bad.group(1)}"] = (
+                        forbidden_actions.get(f"id={m_bad.group(1)}", 0) + 1
+                    )
             except Exception as e:
                 logger.warning("Action failed at step %d: %s", step + 1, e)
                 action_history.append(f"Step {step+1}: FAILED: {e}")
@@ -434,41 +532,68 @@ class PreActOSAgent:
         action: ActionSpec,
         parameters: dict[str, Any],
     ) -> None:
-        """Execute a PreAct ActionSpec on OSWorld."""
+        """Execute a PreAct ActionSpec on OSWorld.
+
+        Preference order:
+          1. raw_command (verbatim pyautogui from recording) for action types
+             where the semantic form commonly drops detail — keypress,
+             hotkeys, and type (which semantic collapses Ctrl+S / multi-key
+             sequences into a single press).
+          2. semantic action using the live a11y tree (resolves dynamic
+             coordinates).
+          3. raw_command as a last-resort fallback if semantic raises.
+
+        The rationale: keystroke actions carry no dynamic state, so the
+        recorded command is guaranteed correct. Click/type benefit from
+        re-resolving selectors against the current tree.
+        """
         at = action.type
+        raw = (action.raw_command or "").strip()
 
-        if at == ActionType.ACTION_CLICK:
-            target = self._resolve(action.target, parameters)
-            await self.env.click(target)
+        # Prefer raw for keypress/hotkey (semantic compile drops Ctrl/Alt modifiers).
+        if raw and at == ActionType.ACTION_KEYPRESS:
+            self.env._exec_pyautogui(raw if raw.startswith("import ") else f"import pyautogui\n{raw}")
+            return
 
-        elif at == ActionType.ACTION_TYPE:
-            target = self._resolve(action.target, parameters)
-            text = action.text
-            if action.parameter_name and action.parameter_name in parameters:
-                text = str(parameters[action.parameter_name])
-            if text:
-                await self.env.type_text(target, text)
+        try:
+            if at == ActionType.ACTION_CLICK:
+                target = self._resolve(action.target, parameters)
+                await self.env.click(target)
 
-        elif at == ActionType.ACTION_KEYPRESS:
-            await self.env.press_key(action.key or "Enter")
+            elif at == ActionType.ACTION_TYPE:
+                target = self._resolve(action.target, parameters)
+                text = action.text
+                if action.parameter_name and action.parameter_name in parameters:
+                    text = str(parameters[action.parameter_name])
+                if text:
+                    await self.env.type_text(target, text)
 
-        elif at == ActionType.ACTION_SCROLL:
-            await self.env.scroll(action.direction or "down", action.amount or 3)
+            elif at == ActionType.ACTION_KEYPRESS:
+                await self.env.press_key(action.key or "Enter")
 
-        elif at == ActionType.ACTION_NAVIGATE:
-            url = action.text or ""
-            if action.parameter_name and action.parameter_name in parameters:
-                url = str(parameters[action.parameter_name])
-            await self.env.navigate(url)
+            elif at == ActionType.ACTION_SCROLL:
+                await self.env.scroll(action.direction or "down", action.amount or 3)
 
-        elif at == ActionType.WAIT:
-            await self.env.wait_ms(action.ms or 1000)
+            elif at == ActionType.ACTION_NAVIGATE:
+                url = action.text or ""
+                if action.parameter_name and action.parameter_name in parameters:
+                    url = str(parameters[action.parameter_name])
+                await self.env.navigate(url)
 
-        elif at == ActionType.INSPECT_TEXT:
-            screenshot = await self.env.screenshot()
-            prompt = action.prompt or "What is shown on screen?"
-            response = await self.llm.complete_with_vision(prompt, [screenshot])
-            logger.info("inspect_text: %s", response[:100])
+            elif at == ActionType.WAIT:
+                await self.env.wait_ms(action.ms or 1000)
+
+            elif at == ActionType.INSPECT_TEXT:
+                screenshot = await self.env.screenshot()
+                prompt = action.prompt or "What is shown on screen?"
+                response = await self.llm.complete_with_vision(prompt, [screenshot])
+                logger.info("inspect_text: %s", response[:100])
+        except Exception as e:
+            if raw:
+                logger.warning("Semantic action %s failed (%s) — raw fallback", at, e)
+                self.env._exec_pyautogui(raw if raw.startswith("import ") else f"import pyautogui\n{raw}")
+                return
+            raise
 
     def _resolve(self, target: Optional[str], params: dict) -> str:
         if not target:
@@ -477,11 +602,16 @@ class PreActOSAgent:
             target = target.replace(f"${{{k}}}", str(v))
         return target
 
-    async def compile_and_store(
+    async def compile(
         self, instruction: str, step_data: list[dict], app_context: str = ""
-    ) -> Optional[str]:
-        """Compile CUA steps into program and store."""
-        if not step_data or not self.store:
+    ) -> Optional[RPAProgram]:
+        """Compile CUA step trace into an RPAProgram (does NOT store).
+
+        Split from the old compile_and_store so the caller can run a
+        pre-store verification replay: compile → reset env → replay →
+        re-evaluate → store only if still passes.
+        """
+        if not step_data:
             return None
 
         trace_text = format_os_trace(step_data)
@@ -494,12 +624,97 @@ class PreActOSAgent:
             )
             program = self._parse_program(response, instruction, app_context)
             if program:
-                pid = await self.store.store(program)
-                logger.info("Stored program: %s (%d states)", pid[:8], len(program.states))
-                return pid
+                self._attach_raw_commands(program, step_data)
+                from preact.rag.compile_utils import sanitize_literals
+                program = sanitize_literals(program, instruction)
+            return program
         except Exception as e:
             logger.warning("Compilation failed: %s", e)
-        return None
+            return None
+
+    async def store_program(self, program: RPAProgram) -> Optional[str]:
+        """Persist a compiled program to RAG (tagged osworld)."""
+        if not self.store:
+            return None
+        pid = await self.store.store(program, platform="osworld")
+        logger.info("Stored program: %s (%d states)", pid[:8], len(program.states))
+        return pid
+
+    async def replay_program(
+        self, instruction: str, program: RPAProgram
+    ) -> OSTaskResult:
+        """Run the compiled program against the current env (no CUA fallback).
+
+        Used for pre-store verification — if this run doesn't re-pass the
+        evaluator, the program is lossy and must not be stored.
+        """
+        return await self._execute_with_rpa(instruction, program, {})
+
+    async def compile_and_store(
+        self, instruction: str, step_data: list[dict], app_context: str = ""
+    ) -> Optional[str]:
+        """Legacy one-shot compile+store (no verification replay).
+
+        Kept so existing callers and tests keep working. New callers
+        should use `compile()` + `store_program()` with a verification
+        replay in between.
+        """
+        program = await self.compile(instruction, step_data, app_context)
+        if not program:
+            return None
+        return await self.store_program(program)
+
+    def _attach_raw_commands(
+        self, program: RPAProgram, step_data: list[dict]
+    ) -> None:
+        """Pair each transition with the raw pyautogui command from the trace.
+
+        Strategy:
+          - Collect CUA-produced commands in order (keep only executed steps
+            with a non-empty command string).
+          - If transition_count == cmd_count, zip 1-to-1 (common case).
+          - Otherwise match each transition to the next unconsumed command
+            whose pyautogui op matches the transition's action type
+            (click→click, type→write, keypress→press/keyDown/hotkey).
+
+        Missing matches are OK — transitions without raw_command simply
+        fall back to the semantic path at replay time.
+        """
+        cmds = [
+            (i, (s.get("command") or "").strip())
+            for i, s in enumerate(step_data)
+            if (s.get("command") or "").strip()
+        ]
+        if not cmds:
+            return
+
+        type_to_ops = {
+            ActionType.ACTION_CLICK: ("click", "leftClick", "mouseClick"),
+            ActionType.ACTION_DOUBLE_CLICK: ("doubleClick",),
+            ActionType.ACTION_TYPE: ("write", "typewrite"),
+            ActionType.ACTION_KEYPRESS: ("press", "keyDown", "keyUp", "hotkey"),
+            ActionType.ACTION_SCROLL: ("scroll", "hscroll", "vscroll"),
+            ActionType.ACTION_DRAG: ("drag", "moveTo"),
+            ActionType.ACTION_NAVIGATE: ("run", "subprocess"),
+        }
+
+        if len(program.transitions) == len(cmds):
+            for t, (_, cmd) in zip(program.transitions, cmds):
+                t.action.raw_command = cmd
+            return
+
+        consumed = [False] * len(cmds)
+        for t in program.transitions:
+            wanted = type_to_ops.get(t.action.type, ())
+            if not wanted:
+                continue
+            for j, (_, cmd) in enumerate(cmds):
+                if consumed[j]:
+                    continue
+                if any(f"pyautogui.{op}" in cmd for op in wanted):
+                    t.action.raw_command = cmd
+                    consumed[j] = True
+                    break
 
     def _parse_program(self, response: str, instruction: str, app_ctx: str) -> Optional[RPAProgram]:
         """Parse LLM response into RPAProgram."""
@@ -513,7 +728,11 @@ class PreActOSAgent:
             data = data[0] if data else {}
         if "metadata" not in data:
             data["metadata"] = {}
-        data["metadata"].setdefault("task_description", instruction)
+        # Pin task_description to the *original* user instruction so RAG
+        # queries match against the real request text (the compiler tends
+        # to rewrite it into an abstract summary that doesn't embed close
+        # to the user's natural phrasing).
+        data["metadata"]["task_description"] = instruction
         data["metadata"].setdefault("application_context", app_ctx)
         if "human_interventions" in data:
             data["human_interventions"] = [
@@ -653,20 +872,37 @@ class PreActOSAgent:
             m = re.search(r"```(?:\w+)?\s*(.*?)```", clean, re.DOTALL)
             if m:
                 clean = m.group(1).strip()
-        # Take first non-empty line
-        for line in clean.splitlines():
-            line = line.strip()
-            if line:
-                clean = line
+
+        # Scan ALL non-empty lines for the first one that starts with a
+        # known action head, so reasoning preambles like "I need to..."
+        # don't swallow the actual action. Also drop "Action:" prefix.
+        action_line = None
+        for raw_line in clean.splitlines():
+            line = re.sub(
+                r"^(action|next)\s*[:=]\s*", "", raw_line.strip(),
+                flags=re.IGNORECASE,
+            )
+            if not line:
+                continue
+            if (self._SEMANTIC_HEAD_RE.match(line)
+                    or line.startswith("pyautogui.")
+                    or line in {"DONE", "FAIL"}
+                    or line.startswith("ANSWER:")):
+                action_line = line
                 break
-        # Drop leading tokens like "Action:"
-        clean = re.sub(r"^(action|next)\s*[:=]\s*", "", clean, flags=re.IGNORECASE)
+        if action_line is None:
+            # last resort: first non-empty line (legacy behavior)
+            for raw_line in clean.splitlines():
+                if raw_line.strip():
+                    action_line = raw_line.strip()
+                    break
+            action_line = action_line or clean
 
-        head_match = self._SEMANTIC_HEAD_RE.match(clean)
+        head_match = self._SEMANTIC_HEAD_RE.match(action_line)
         if head_match:
-            return await self._dispatch_semantic(clean, elements)
+            return await self._dispatch_semantic(action_line, elements)
 
-        # Fallback: legacy pyautogui extraction
+        # Fallback: legacy pyautogui extraction (scans the whole response)
         cmd = self._extract_pyautogui_cmd(clean)
         if cmd:
             self.env._exec_pyautogui(cmd)
@@ -690,7 +926,17 @@ class PreActOSAgent:
         return cx, cy
 
     def _resolve_xy(self, s: str) -> tuple[int, int]:
-        """Resolve raw x,y coordinates from args string."""
+        """Resolve raw x,y coordinates from args string.
+
+        Accepts both positional (`100, 200`) and named (`x=100, y=200`)
+        forms — LLMs emit both shapes.
+        """
+        # Named form: x=N, y=M (either order)
+        mx = re.search(r"x\s*=\s*(-?\d+)", s)
+        my = re.search(r"y\s*=\s*(-?\d+)", s)
+        if mx and my:
+            return int(mx.group(1)), int(my.group(1))
+        # Positional form: first two numbers separated by a comma
         m = re.search(r"(-?\d+)\s*,\s*(-?\d+)", s)
         if not m:
             raise ValueError(f"no x,y in args: {s!r}")

@@ -61,14 +61,33 @@ def _parse_a11y_tree(tree_xml: str) -> list[dict[str, Any]]:
     return elements
 
 
+def _local_name(qname: str) -> str:
+    """Strip XML namespace from a qualified name (e.g. '{uri}screencoord' -> 'screencoord')."""
+    if qname.startswith("{"):
+        return qname.split("}", 1)[1]
+    return qname
+
+
 def _extract_elements_xml(node, elements: list, depth: int = 0):
-    """Extract elements from XML accessibility tree."""
+    """Extract elements from XML accessibility tree.
+
+    OSWorld's server serializes AT-SPI nodes with namespaced attributes
+    (cp:screencoord, cp:size, st:showing, st:visible, st:enabled). We
+    match by local-name so the parser works regardless of prefix.
+    """
+    # Build a local-name -> value map from namespaced attrs
+    attrs_by_local: dict[str, str] = {}
+    for qname, value in node.attrib.items():
+        lname = _local_name(qname)
+        if lname not in attrs_by_local:
+            attrs_by_local[lname] = value
+
     elem = {
-        "tag": node.tag,
-        "name": node.get("name", ""),
-        "text": node.get("text", node.text or ""),
-        "role": node.get("class", node.tag),
-        "description": node.get("description", ""),
+        "tag": _local_name(node.tag),
+        "name": attrs_by_local.get("name", ""),
+        "text": attrs_by_local.get("text", node.text or ""),
+        "role": attrs_by_local.get("class", _local_name(node.tag)),
+        "description": attrs_by_local.get("description", ""),
         "x": 0,
         "y": 0,
         "width": 0,
@@ -78,8 +97,7 @@ def _extract_elements_xml(node, elements: list, depth: int = 0):
         "depth": depth,
     }
 
-    # Parse coordinates from various formats
-    screencoord = node.get("screencoord", "")
+    screencoord = attrs_by_local.get("screencoord", "")
     if screencoord:
         try:
             parts = screencoord.strip("()").split(",")
@@ -88,7 +106,7 @@ def _extract_elements_xml(node, elements: list, depth: int = 0):
         except (ValueError, IndexError):
             pass
 
-    size = node.get("size", "")
+    size = attrs_by_local.get("size", "")
     if size:
         try:
             parts = size.strip("()").split(",")
@@ -97,17 +115,25 @@ def _extract_elements_xml(node, elements: list, depth: int = 0):
         except (ValueError, IndexError):
             pass
 
-    # Check state attributes (with namespace handling)
-    for attr_name, attr_val in node.attrib.items():
-        if "showing" in attr_name:
-            elem["visible"] = attr_val.lower() == "true"
-        if "enabled" in attr_name:
-            elem["enabled"] = attr_val.lower() == "true"
-        if "visible" in attr_name:
-            elem["visible"] = attr_val.lower() == "true"
+    # AT-SPI states: use local names 'showing' / 'visible' / 'enabled'.
+    # Element is on-screen only when BOTH showing=true and visible=true.
+    showing = attrs_by_local.get("showing", "").lower() == "true"
+    visible_attr = attrs_by_local.get("visible", "").lower() == "true"
+    # If the server didn't emit the screencoord (because showing/visible were
+    # false), treat the element as not-on-screen regardless.
+    on_screen = bool(screencoord) and showing and visible_attr
+    elem["visible"] = on_screen
+    if "enabled" in attrs_by_local:
+        elem["enabled"] = attrs_by_local["enabled"].lower() == "true"
 
-    # Only add elements that are visible and have some identifying info
-    if elem["visible"] and (elem["name"] or elem["text"] or elem["description"]):
+    # Only include elements that are actually on screen and carry some
+    # identifying info the LLM can target. Off-screen/zero-size nodes
+    # would otherwise all map to (0,0) clicks.
+    if (
+        on_screen
+        and (elem["width"] > 0 and elem["height"] > 0)
+        and (elem["name"] or elem["text"] or elem["description"])
+    ):
         elements.append(elem)
 
     for child in node:
@@ -330,6 +356,54 @@ class OSWorldEnvironment:
             logger.warning("Screenshot failed: %s", e)
             return self._last_screenshot or b""
 
+    async def annotated_screenshot(self) -> bytes:
+        """Screenshot with numbered red boxes on a11y elements.
+
+        Indexes match `_get_a11y_elements()` order so the LLM can correlate
+        a visible box label to `click(id=N)`.
+        """
+        png = await self.screenshot()
+        elements = self._last_elements
+        if not elements:
+            elements = self._get_a11y_elements()
+        if not elements or not png:
+            return png
+        try:
+            import io
+            from PIL import Image, ImageDraw, ImageFont
+
+            img = Image.open(io.BytesIO(png)).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            try:
+                font = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14
+                )
+            except Exception:
+                font = ImageFont.load_default()
+            W, H = img.size
+            for idx, el in enumerate(elements):
+                x = el.get("x", 0)
+                y = el.get("y", 0)
+                w = el.get("width", 0)
+                h = el.get("height", 0)
+                if w <= 0 or h <= 0:
+                    continue
+                if x < 0 or y < 0 or x >= W or y >= H:
+                    continue
+                x1 = min(x + w, W - 1)
+                y1 = min(y + h, H - 1)
+                draw.rectangle([x, y, x1, y1], outline=(255, 0, 0), width=1)
+                label = str(idx)
+                tb = draw.textbbox((x, y1), label, font=font, anchor="lb")
+                draw.rectangle(tb, fill=(0, 0, 0))
+                draw.text((x, y1), label, font=font, anchor="lb", fill=(255, 255, 255))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception as e:
+            logger.warning("annotated_screenshot failed: %s", e)
+            return png
+
     async def element_screenshot(self, selector: str) -> bytes:
         """Capture full screenshot (element-level cropping not easily supported)."""
         return await self.screenshot()
@@ -386,6 +460,10 @@ class OSWorldEnvironment:
         except Exception as e:
             logger.warning("pyautogui command failed: %s — %s", command[:100], e)
 
+    def exec_pyautogui(self, command: str) -> None:
+        """Public wrapper around `_exec_pyautogui` for external CUA backends."""
+        self._env.controller.execute_python_command(command)
+
     def _get_element_center(self, selector: str) -> Optional[tuple[int, int]]:
         """Get center coordinates of element."""
         # Check for direct coordinates
@@ -440,11 +518,7 @@ class OSWorldEnvironment:
             raise ValueError(f"type_text: element not found: {selector}")
         self._exec_pyautogui(f"import pyautogui; pyautogui.click({center[0]}, {center[1]})")
         await asyncio.sleep(0.3)
-
-        # Use write for unicode, typewrite for ASCII
-        escaped = text.replace("\\", "\\\\").replace("'", "\\'")
-        self._exec_pyautogui(f"import pyautogui; pyautogui.write('{escaped}')")
-        await asyncio.sleep(0.3)
+        await self._write_text_safely(text)
 
     async def clear_and_type(self, selector: str, text: str) -> None:
         """Select all, then type. Raises ValueError on missing selector."""
@@ -456,9 +530,25 @@ class OSWorldEnvironment:
 
         self._exec_pyautogui("import pyautogui; pyautogui.hotkey('ctrl', 'a')")
         await asyncio.sleep(0.1)
-        escaped = text.replace("\\", "\\\\").replace("'", "\\'")
-        self._exec_pyautogui(f"import pyautogui; pyautogui.write('{escaped}')")
-        await asyncio.sleep(0.3)
+        await self._write_text_safely(text)
+
+    async def _write_text_safely(self, text: str) -> None:
+        # Split on newlines — pyautogui.write treats \n as a literal char,
+        # so the LLM-emitted trailing \n (Enter) must be issued as press('enter').
+        # json.dumps gives us a Python-valid string literal for any content,
+        # preventing the unterminated-string SyntaxError that broke warm replay.
+        import json
+        parts = text.split("\n")
+        for i, line in enumerate(parts):
+            if i > 0:
+                self._exec_pyautogui("import pyautogui; pyautogui.press('enter')")
+                await asyncio.sleep(0.1)
+            if line:
+                self._exec_pyautogui(
+                    f"import pyautogui; pyautogui.write({json.dumps(line)})"
+                )
+                await asyncio.sleep(0.1)
+        await asyncio.sleep(0.2)
 
     async def press_key(self, key: str) -> None:
         """Press a keyboard key."""
@@ -532,8 +622,7 @@ class OSWorldEnvironment:
         """Click element, then type value."""
         await self.click(selector)
         await asyncio.sleep(0.3)
-        escaped = value.replace("\\", "\\\\").replace("'", "\\'")
-        self._exec_pyautogui(f"import pyautogui; pyautogui.write('{escaped}')")
+        await self._write_text_safely(value)
 
     async def navigate(self, url: str) -> None:
         """Open URL in browser or run command."""

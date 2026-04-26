@@ -90,6 +90,8 @@ def run_preact_task(
     agent,
     instruction: str,
     max_steps: int,
+    task_config: Optional[dict] = None,
+    verify_before_store: bool = True,
 ) -> TaskResult:
     """Run a task using PreAct agent (sync wrapper)."""
     start = time.time()
@@ -104,12 +106,50 @@ def run_preact_task(
 
         success = score >= 1.0
 
-        # Compile if CUA succeeded
-        if result.mode == "cua" and result.success and result.step_data:
+        # Compile on any successful run (cua OR hybrid) when the real
+        # evaluator agrees. When verify_before_store=True, run a
+        # verification replay: reset env, replay compiled program,
+        # re-evaluate; store only if the program independently re-passes.
+        # When False, store unconditionally (cheaper cold runs).
+        if (
+            result.success
+            and success
+            and result.step_data
+            and task_config is not None
+        ):
             try:
-                _run_async(agent.compile_and_store(instruction, result.step_data))
+                program = _run_async(agent.compile(instruction, result.step_data))
+                if program is None:
+                    logger.warning("Compile returned no program")
+                elif verify_before_store:
+                    logger.info(
+                        "Verifying compiled program (%d states) before storing...",
+                        len(program.states),
+                    )
+                    desktop_env.reset(task_config=task_config)
+                    time.sleep(60)
+                    verify_result = _run_async(agent.replay_program(instruction, program))
+                    time.sleep(20)
+                    verify_score = desktop_env.evaluate()
+                    # Double gate: replay must itself report success AND the
+                    # evaluator must re-pass. Prior single-gate behavior let
+                    # programs with silently-failing pyautogui actions slip
+                    # through if the env still held state from the cold run.
+                    replay_ok = bool(verify_result and verify_result.success)
+                    if verify_score >= 1.0 and replay_ok:
+                        pid = _run_async(agent.store_program(program))
+                        logger.info("Verified and stored program: %s", (pid or "")[:8])
+                    else:
+                        logger.warning(
+                            "Program failed verification (score=%.1f, replay_ok=%s) — discarded",
+                            verify_score,
+                            replay_ok,
+                        )
+                else:
+                    pid = _run_async(agent.store_program(program))
+                    logger.info("Stored (unverified): %s", (pid or "")[:8])
             except Exception as e:
-                logger.warning("Compilation failed: %s", e)
+                logger.warning("Compile/verify failed: %s", e)
 
         return TaskResult(
             task_id="",
@@ -242,8 +282,12 @@ def run_benchmark(args):
             if system_name == "preact" and preact_agent:
                 os_env_wrapper = OSWorldEnvironment(desktop_env)
                 preact_agent.env = os_env_wrapper
+                traj_dir = f"trajectories/osworld/{domain}_{task_id[:8]}"
+                preact_agent._trajectory_dir = traj_dir
                 result = run_preact_task(
-                    desktop_env, preact_agent, instruction, args.max_steps
+                    desktop_env, preact_agent, instruction, args.max_steps,
+                    task_config=task_data,
+                    verify_before_store=args.verify_before_store,
                 )
             else:
                 continue
@@ -302,7 +346,7 @@ def run_benchmark(args):
     }
 
     with open(results_file, "w") as f:
-        json.dump(results_data, f, indent=2)
+        json.dump(results_data, f, indent=2, default=str)
     logger.info("\nResults saved: %s", results_file)
 
     # Print summary
@@ -334,6 +378,19 @@ def main():
     parser.add_argument("--provider", default="docker")
     parser.add_argument("--vm-path", default=os.path.expanduser("~/OSWorld/docker_vm_data/Ubuntu.qcow2"))
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument(
+        "--verify-before-store",
+        dest="verify_before_store",
+        action="store_true",
+        default=True,
+        help="Replay compiled program and re-evaluate before storing (default: on).",
+    )
+    parser.add_argument(
+        "--no-verify-before-store",
+        dest="verify_before_store",
+        action="store_false",
+        help="Skip verification replay — store on first successful compile.",
+    )
     args = parser.parse_args()
 
     run_benchmark(args)

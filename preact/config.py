@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 class LLMConfig:
     """Configuration for LLM clients."""
 
-    model: str = "claude-sonnet-4-6"
+    model: str = field(default_factory=lambda: os.environ.get("PREACT_MODEL", "claude-sonnet-4-6"))
     api_key: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
     temperature: float = 0.0
     max_output_tokens: int = 8192

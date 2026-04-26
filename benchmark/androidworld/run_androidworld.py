@@ -288,7 +288,7 @@ async def run_benchmark(args):
                     logger.error("Task init failed: %s", e)
                     continue
 
-                max_steps = int(10 * task.complexity)
+                max_steps = min(int(8 * task.complexity), 30)
 
                 if system_name == "preact" and preact_agent:
                     result = await run_preact_task(

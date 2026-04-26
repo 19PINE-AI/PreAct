@@ -53,12 +53,24 @@ Produce a JSON object with this exact structure:
       "to": "<target_state_id>",
       "action": {
         "type": "<action_type>",
+        "description": "<ONE-SENTENCE natural-language summary of what this action does — required, human-readable, no code>",
         ... action-specific fields ...
       }
     }
   ],
   "human_interventions": []
 }
+
+## Natural-language descriptions (REQUIRED)
+
+Every state MUST have a `description` field that reads like a caption
+("audio recorder main screen", "save-confirmation dialog"). Every transition
+action MUST have a `description` field that reads like a caption
+("tap the record button to start recording", "enter the filename in the
+save-as field"). These descriptions are consumed by a downstream selector
+agent that picks which compiled program to replay based on the task goal,
+so make them precise and parameter-aware — e.g. "type the filename (parameter
+`filename`)", not "type text".
 
 ## Rules
 
@@ -111,39 +123,49 @@ Produce the JSON state machine. Remember:
 - For answer/data extraction tasks, add inspect_text before terminal state"""
 
 
-SYSTEM_PROMPT_CUA = """You are an agent controlling an Android device. Based on the user's goal, examine the screenshot and UI element list, then decide the next action.
+SYSTEM_PROMPT_CUA = """You are an agent that operates an Android device on behalf of a user. At each step you are given TWO images of the current screen:
+  1. The raw screenshot (unobscured).
+  2. The same screenshot with GREEN bounding boxes and WHITE numeric index labels drawn on every interactable element. The numeric label in the top-left corner of a box IS that element's index (and matches the index in the UI element list).
 
-## Available Actions (respond with EXACTLY ONE JSON action):
+You also receive a list of the numbered UI elements and a history of what you have already done.
 
-- Click by index: {{"action_type": "click", "index": <element_index>}}
-- Click by coordinate: {{"action_type": "click", "x": <x>, "y": <y>}}
-- Long press: {{"action_type": "long_press", "index": <element_index>}}
-- Type text (by index): {{"action_type": "input_text", "text": "<text>", "index": <element_index>}}
-- Type text (by coord): {{"action_type": "input_text", "text": "<text>", "x": <x>, "y": <y>}}
+## Action list (you will emit EXACTLY ONE action as JSON):
+
+- Click: {{"action_type": "click", "index": <index>}}
+- Click by coordinate (fallback): {{"action_type": "click", "x": <x>, "y": <y>}}
+- Long press: {{"action_type": "long_press", "index": <index>}}
+- Type text: {{"action_type": "input_text", "text": "<text>", "index": <index>}}  (auto-focuses field first)
 - Press Enter: {{"action_type": "keyboard_enter"}}
-- Navigate home: {{"action_type": "navigate_home"}}
-- Navigate back: {{"action_type": "navigate_back"}}
+- Home: {{"action_type": "navigate_home"}}
+- Back: {{"action_type": "navigate_back"}}
 - Scroll: {{"action_type": "scroll", "direction": "<up|down|left|right>"}}
 - Open app: {{"action_type": "open_app", "app_name": "<name>"}}
 - Wait: {{"action_type": "wait"}}
-- Answer question: {{"action_type": "answer", "text": "<answer>"}}
-- Task complete: {{"action_type": "status", "goal_status": "complete"}}
-- Task infeasible: {{"action_type": "status", "goal_status": "infeasible"}}
+- Answer: {{"action_type": "answer", "text": "<answer>"}}
+- Complete: {{"action_type": "status", "goal_status": "complete"}}
+- Infeasible: {{"action_type": "status", "goal_status": "infeasible"}}
 
-## Guidelines:
-- If UI elements are listed, use index-based actions (preferred)
-- If no UI elements are listed, use coordinate-based actions (x, y) estimated from the screenshot. The screen is 1080x2400 pixels.
-- Use open_app to launch apps, not the app drawer
-- Use input_text for typing (it clicks the field first, then types)
-- For data retrieval tasks, use the "answer" action to provide the answer BEFORE marking complete
-- Keep answers concise — just the requested value, no explanation
+## Guidelines
+- Prefer index-based actions; use coordinates only if no element list is available.
+- Use open_app rather than the app drawer.
+- input_text clicks the field and types — do not click the field first.
+- For question-answering tasks, emit an `answer` action with the value BEFORE `status complete`.
+- If an action produced NO visible change, do NOT repeat it — pick a different element or approach (scroll, back, alternate target).
+- The UI-elements list already includes the FULL `text` attribute of every TextView/EditText — you do NOT need to scroll to "see more text" inside an editor/viewer. If you have already opened a document and its element has a long `text`, extract the info you need from that element and move on. Scrolling repeatedly inside the same document is a failure mode.
+- Track phases explicitly in `Reason:` for multi-step tasks (e.g. "Phase 1: read source file DONE, now Phase 2: enter data in target app").
+- **Replacing field content**: `input_text` appends — it does NOT clear the field. If the target field already has any text and the task requires replacement (not appending), you MUST first clear it: `long_press` the field, then click the "Select all" menu item, then emit `input_text` with the new value. Never emit `input_text` into a non-empty field unless you intend to append.
+- **Scroll boundaries**: A horizontal or vertical list has an end. If you scroll in a direction and the UI-elements list is unchanged from before the scroll, that direction is exhausted — do NOT keep scrolling the same way. Try the opposite direction once; if that is also exhausted, the target item is not in this list — conclude `infeasible` or pick a different entry point rather than looping.
+- **Image content**: If a task requires reading text from an image and manual zoom/tap does not surface the text in UI elements, do not loop on zoom gestures. Try one alternate viewer (e.g. Google Lens) once; if that fails, emit `status infeasible` — repeated zoom/tap in a gallery is a guaranteed timeout.
 
-## If an action seems to have no effect:
-- If a click or type appears to have no effect on screen, try a DIFFERENT element or a different approach — do NOT repeat the same action.
-- Prefer elements that have a resource_id or content-desc; avoid clicking pure-index positions when a stable element is available.
-- If a previous step said the action FAILED or produced no visible change, pick a different target (e.g. scroll to reveal, press back, or try a nearby alternative).
+## OUTPUT FORMAT (REQUIRED)
 
-## CRITICAL: Respond with ONLY a single JSON action. No reasoning, no explanation, just the JSON."""
+Respond in EXACTLY this two-line format:
+
+Reason: <one sentence explaining which element you picked and why>
+Action: {{"action_type": "...", ...}}
+
+Nothing else. Do not prefix with code fences.
+"""
 
 USER_PROMPT_CUA = """Goal: {goal}
 
@@ -156,6 +178,35 @@ Current UI elements:
 {ui_elements}
 
 Respond with a single JSON action:"""
+
+SYSTEM_PROMPT_SUMMARY = """You are summarizing the latest step of an agent operating an Android device. Your summary will be appended to the agent's action history and used to guide future action selection."""
+
+
+USER_PROMPT_SUMMARY = """The (overall) user goal/request is: {goal}
+
+You are given the screenshot BEFORE the action (labeled "before") and AFTER the action (labeled "after"), together with the UI element lists for each.
+
+UI elements BEFORE:
+{before_elements}
+
+UI elements AFTER:
+{after_elements}
+
+Action picked: {action}
+Reason given: {reason}
+
+Compare the two screenshots and UI element lists. In <=50 words on ONE single line, summarize:
+- what was intended,
+- whether it worked (be critical — the action/reason might be wrong),
+- what should or should not be done next.
+
+Rules:
+- Keep it to a single line, <=50 words.
+- For `answer` and `wait` actions you may assume they worked as expected.
+- Include any information worth remembering across steps (e.g. values read from the screen).
+
+Summary of this step:"""
+
 
 USER_PROMPT_CUA_FALLBACK = """Goal: {goal}
 
