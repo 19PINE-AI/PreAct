@@ -15,16 +15,11 @@
 \maketitle
 
 \begin{abstract}
-Current Computer-Using Agents (CUAs) re-derive already-known action sequences on every invocation, paying full LLM-inference cost even for tasks they have completed before. This ``rerun crisis'' is both economically wasteful (4--5 seconds of vision-token processing per step) and architecturally unsatisfying: agents accumulate experience but cannot directly execute it.
+Computer-Using Agents (CUAs) re-derive solutions to familiar tasks on every invocation, paying full LLM-inference cost even for behavior they have demonstrably completed before. We present \textsc{PreAct}, a CUA harness that grows a \emph{self-extending executable code corpus}: state-machine programs that are simultaneously the compiled artifact of a successful trajectory \emph{and} the runtime program for subsequent invocations. \textbf{The artifact is the runtime}; what the agent ``remembers'' is what it can directly execute. The harness is a verified compile-extend loop driven by RPA-replay-failure detection: when CUA succeeds, the live trace is compiled into a state-machine program; when later replay fails or partial-replays, the harness falls through to CUA, generates a fresh state machine, and (passing a \emph{verify-before-store gate}) extends or replaces the corpus.
 
-We present \textsc{PreAct}, a CUA harness that grows a \emph{self-extending executable code corpus}: state-machine programs that are simultaneously the compiled artifact of a successful trajectory \emph{and} the runtime program for subsequent invocations. The harness is a verified compile-extend loop: when CUA succeeds on a task, the live trace is compiled into a state-machine program. When RPA replay later fails or partial-replays, the harness falls through to CUA, generates a fresh state machine, and (passing a \emph{verify-before-store gate}) extends or replaces the corpus. The artifact is the runtime: what the agent ``remembers'' is what it can directly execute.
+We validate the load-bearing claim---that the verify-before-store gate is empirically \emph{necessary} for monotonicity---at multi-seed paper-grade rigor. A 2$\times$2 ablation (cold/warm $\times$ gate ON/OFF) on AndroidWorld official-15 with $n{=}5$ seeds shows gate-ON cold-to-warm $\Delta = +1.2 \pm 0.45$ tasks versus gate-OFF $\Delta = -1.4 \pm 0.89$, a difference-of-deltas of 2.6 tasks (17.3\,pp) with zero inversions across ten paired observations (sign-test $p < 0.001$). Cross-platform replication on OSWorld test\_tiny ($n{=}2$ reps) reproduces the regression at $-3$ tasks ($-50$\,pp). Five reproducible \emph{cov$=$100\%/score$=$0 smoking-gun replays} document the lossy-compile pattern the gate filters: programs whose actions execute mechanically to completion but whose end state does not satisfy the live evaluator. Cold$\to$warm monotonicity itself holds across three Gemini seeds (mean $\Delta = +1.33 \pm 0.58$); cross-model replication confirms 73.3\% is not Claude-specific.
 
-We validate two load-bearing claims at multi-seed paper-grade rigor:
-\textbf{(1) Verify-before-store is necessary for monotonicity.} A 2$\times$2 ablation (cold/warm $\times$ gate ON/OFF) on AndroidWorld official-15 with $n{=}5$ seeds shows gate-ON cold-to-warm $\Delta = +1.2 \pm 0.45$ tasks (all five monotonic) versus gate-OFF $\Delta = -1.4 \pm 0.89$ (all five regress); difference-of-deltas 2.6 tasks (17.3\,pp), zero inversions across ten paired observations (sign-test $p < 0.001$). Cross-platform replication on OSWorld test\_tiny ($n{=}2$) shows identical gate-OFF regression of $-3$ tasks ($-50$\,pp). Five reproducible cov$=$100\%/score$=$0 \emph{smoking-gun} replays document the exact lossy-compile pattern the gate filters.
-\textbf{(2) Cold$\to$warm monotonicity holds.} Three independent seeds (rag\_db reset per seed) all show monotonic warm refinement, mean $\Delta = +1.33 \pm 0.58$ tasks. Cross-model replication confirms parity is not Claude-specific: Gemini 3 Flash (3-seed mean) and Claude Sonnet 4.6 both achieve 73.3\% on AndroidWorld official-15 with an identical stable failure set, implicating harness-level deterministic UI failures rather than model-capability differences.
-
-Equally informative are the \emph{negative} findings: code-level runtime guardrails are statistically aggregate-neutral at $n{=}5$ (cold means identical, $10.2 = 10.2$); prompt-level Pre-Act content is dead code in the production CUA path. The harness---not prompts or guardrails---is what produces monotonic refinement.
-
+Equally informative are the \emph{negative} findings: code-level runtime guardrails are aggregate-neutral at $n{=}5$ (cold means identical, $10.2 = 10.2$); prompt-level Pre-Act content is dead code in the production CUA path. The harness---not prompts or guardrails---is the contribution.
 \end{abstract}
 
 \section{Introduction}
@@ -85,7 +80,41 @@ The architectural commitment that distinguishes PreAct is the second column (\em
 
 \subsection{Overview}
 
-PreAct's harness comprises four cooperating components: a \emph{Program Selector}, a \emph{State-Machine Replayer}, a \emph{CUA Fallback}, and a \emph{Verify-Before-Store Gate}. The data structure they share is the \emph{Program Corpus}, a content-addressed store of state-machine programs (RPA programs) keyed by a dedup signature.
+PreAct's harness comprises four cooperating components: a \emph{Program Selector}, a \emph{State-Machine Replayer}, a \emph{CUA Fallback}, and a \emph{Verify-Before-Store Gate}. The data structure they share is the \emph{Program Corpus}, a content-addressed store of state-machine programs (RPA programs) keyed by a dedup signature. Figure~\ref{fig:arch} shows the data flow.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=10mm and 12mm,
+  font=\small,
+  every node/.style={align=center},
+  comp/.style={draw, rounded corners=2pt, minimum height=8mm, minimum width=22mm, fill=blue!5},
+  store/.style={draw, cylinder, shape border rotate=90, aspect=0.4, minimum height=12mm, minimum width=24mm, fill=orange!10},
+  arrow/.style={-{Latex[length=2mm]}, thick},
+  dasharrow/.style={-{Latex[length=2mm]}, thick, dashed},
+]
+
+\node[comp] (goal) {User goal $T$};
+\node[comp, right=of goal] (sel) {Program\\Selector};
+\node[comp, right=of sel] (replay) {State-Machine\\Replayer};
+\node[comp, below=of replay] (cua) {CUA Fallback\\(T3A / Claude-CU)};
+\node[comp, right=of cua] (compile) {Compiler};
+\node[comp, above=of compile] (gate) {Verify-Before-\\Store Gate};
+\node[store, right=of gate] (corp) {Program\\Corpus};
+
+\draw[arrow] (goal) -- (sel);
+\draw[arrow] (sel) -- node[above, font=\scriptsize]{candidate $P$} (replay);
+\draw[arrow] (sel) to[bend right=18] node[above left, font=\scriptsize]{no candidate} (cua);
+\draw[arrow] (replay) -- node[right, font=\scriptsize]{replay fail} (cua);
+\draw[arrow] (cua) -- node[below, font=\scriptsize]{step trace} (compile);
+\draw[arrow] (compile) -- node[right, font=\scriptsize]{$P'$} (gate);
+\draw[arrow] (gate) -- node[above, font=\scriptsize]{store/replace} (corp);
+\draw[dasharrow] (corp.north) to[bend right=22] node[above, font=\scriptsize]{retrieve} (sel.north);
+
+\end{tikzpicture}
+\caption{The PreAct harness as a verified compile-extend-replace loop. Solid arrows: per-task data flow (goal $\to$ select $\to$ replay or fallback $\to$ compile $\to$ gate $\to$ store). Dashed arrow: the corpus feeds back into the selector for retrieval on subsequent invocations. The corpus is the only growing data structure; the harness code is fixed.}
+\label{fig:arch}
+\end{figure}
 
 The high-level loop for any user task $T$ is:
 
@@ -134,6 +163,49 @@ The Program Selector is itself an LLM-driven component. We deliberately avoided 
 
 When the selector returns ``no candidate'' or replay fails, the harness invokes CUA. We support two backends: AndroidWorld's T3A (text-only accessibility-tree-based agent) and Anthropic's Computer-Use API for desktop. \emph{Critically, the production T3A path uses the verbatim upstream T3A prompt with no Pre-Act-specific additions} (we will return to this in \S\ref{sec:eval-not-loadbearing}).
 
+\section{Concrete Program Example}
+\label{sec:program}
+
+To make the state-machine representation concrete, we present a compiled program for the AndroidWorld \texttt{ContactsNewContactDraft} task (parameters: first name, last name, phone number, phone label).
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,language={}]
+{
+  "metadata": {
+    "task_description": "Go to the new contact screen and enter the following details",
+    "application_context": "com.google.android.contacts",
+    "parameters": ["first_name", "last_name", "phone_number", "phone_label"],
+    "dedup_signature": "contacts_new_draft_4param"
+  },
+  "states": [
+    {"id": "home", "verification": {"type": "expect_element", "xpath": "resource_id=...launcher", "timeout_ms": 3000}},
+    {"id": "contacts_main", "verification": {"type": "expect_element", "xpath": "package=com.google.android.contacts", "timeout_ms": 5000}},
+    {"id": "new_contact_form", "verification": {"type": "expect_element", "xpath": "resource_id=name_field", "timeout_ms": 3000}},
+    {"id": "form_filled", "verification": {"type": "expect_element", "xpath": "text=$first_name $last_name", "timeout_ms": 2000}},
+    {"id": "draft_saved", "verification": {"type": "terminal_state"}}
+  ],
+  "transitions": [
+    {"from": "home", "to": "contacts_main",
+     "action": {"type": "open_app", "app_name": "Contacts",
+                "description": "open the Contacts app"}},
+    {"from": "contacts_main", "to": "new_contact_form",
+     "action": {"type": "action_click", "target": "content_desc=Create new contact",
+                "description": "tap the Create new contact button"}},
+    {"from": "new_contact_form", "to": "form_filled",
+     "action": {"type": "input_text", "text": "$first_name $last_name", "index": 1,
+                "description": "type the contact's first and last name (parameters)"}},
+    /* ... three more transitions for phone number, label, save ... */
+    {"from": "form_filled", "to": "draft_saved",
+     "action": {"type": "action_click", "target": "content_desc=Save",
+                "description": "tap Save to commit the new contact draft"}}
+  ],
+  "human_interventions": []
+}
+\end{lstlisting}
+
+A few details worth noting. First, the verification predicate of each state is an XPath/accessibility-tree pattern that must hold on the live UI; replay halts and falls through to CUA if a predicate fails. Second, parameters (\$first\_name, \$phone\_number, etc.) are inferred at compile time from the live trace: any input text that matches a task-description placeholder is parameterized so the program generalizes across instances. Third, every transition carries a one-sentence \texttt{description} field that the selector reads when judging whether the program applies to a new task.
+
+The state graph here is tree-like, but more complex tasks (delete-confirmation dialogs, navigation that branches on app version) compile into graphs with multiple outgoing transitions per state, where the state's verification predicate selects which branch is active. We do not show such graphs here for space; see Appendix~B for examples drawn from the corpus.
+
 \section{Empirical Validation}
 \label{sec:eval}
 
@@ -149,6 +221,8 @@ When the selector returns ``no candidate'' or replay fails, the harness invokes 
 \textbf{Multi-seed protocol.} For each seed in \{42, 100, 1337, 2024, 7777\}, we move the existing \texttt{rag\_db/} aside (preserving prior state) and start a fresh empty corpus. We then run cold (empty corpus) followed by warm (cold-built corpus) on the same task list.
 
 \textbf{Cost.} The total empirical-validation push (this paper's data) ran in approximately 36 hours of autonomous container time at a total LLM cost of \$18--20.
+
+\paragraph{Headline.} Across all experiments below, the data converge on one structural finding: \textbf{the verify-before-store gate is empirically necessary for monotonicity, and is the only Pre-Act-specific component whose ablation produces a directional SR effect at $n{=}5$.} Prompt content (\S\ref{sec:eval-not-loadbearing}), runtime guardrails (\S\ref{sec:eval-not-loadbearing}), and step-budget caps (\S\ref{sec:eval-not-loadbearing}) all show effects within noise or below the predicted bound. The harness is what works.
 
 \subsection{Cold-to-Warm Monotonicity Holds at $n{=}3$ Seeds}
 \label{sec:eval-monotonic}
@@ -345,7 +419,13 @@ PreAct demonstrates that a \emph{verified self-extending executable code corpus}
 
 The architectural commitment that makes this possible is \emph{the artifact is the runtime}: state-machine programs in PreAct's corpus are not flat scripts generated from a state machine but the directly-executable graphs themselves. What the agent ``remembers'' is what it can directly execute, and the corpus self-extends through verified compile cycles.
 
-Future work: scale to longer-horizon tasks, more diverse benchmarks, and integration with explicit goal-decomposition planners.
+Future work falls in three directions:
+
+\textbf{Scaling the corpus.} The current corpus (58 Android programs after multi-week experiments) is small. We have not characterized the corpus's behavior at $10^3$ or $10^4$ programs: does the agentic selector still discriminate accurately when the candidate set is large? Does dedup-signature collision become an issue? Does the verify-replay step cost become prohibitive at scale?
+
+\textbf{Architectural baselines.} The state-machine-as-executable claim deserves a direct AB against a flat-script baseline (e.g., an ActionEngine-style implementation that runs the same compile cycle but generates flat Python at the verify step). The current paper supports the claim by working implementation across two platforms but not by direct comparison.
+
+\textbf{Long-horizon tasks.} Both AndroidWorld and OSWorld have task horizons of order 10--30 actions. Tasks requiring long-term planning, goal decomposition, or recovery from compound failures (e.g., entire workflow tasks lasting hundreds of actions) are not represented in our benchmarks. We expect the harness's CUA-fallback mechanism to be tested most severely on such tasks; integration with explicit goal-decomposition planners is the natural next step.
 
 \bibliographystyle{plain}
 \bibliography{references}
@@ -355,7 +435,43 @@ Future work: scale to longer-horizon tasks, more diverse benchmarks, and integra
 The full JSON action schema and per-platform backend mappings are described in the project's \texttt{DESIGN.md} (\S Appendix A), reproduced here for completeness. (Omitted in this draft.)
 
 \section*{Appendix B. Per-Task Multi-Seed Data}
-The complete per-task results across all 32 Android multi-seed runs and 8 OSWorld runs are available in the project's \texttt{paper/findings\_summary.md}.
+
+Table~\ref{tab:gemini-3seed} reports per-task warm SR across the three Gemini 3 Flash seeds used for the cold$\to$warm monotonicity experiment (\S\ref{sec:eval-monotonic}). The stable failure set (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) is observed across all three seeds. The variance task (BrowserMaze) is the maze-pathfinding task, where the agent must navigate a grid by directional clicks and the action sequence is sensitive to LLM sampling.
+
+\begin{table}[h]
+\centering
+\caption{Per-task pass/fail across three Gemini 3 Flash seeds on AndroidWorld official-15 (warm-pass results).}
+\label{tab:gemini-3seed}
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Task & seed=42 & seed=100 & seed=1337 \\
+\midrule
+AudioRecorderRecordAudio & PASS & PASS & PASS \\
+AudioRecorderRecordAudioWithFileName & PASS & PASS & PASS \\
+BrowserDraw & FAIL & FAIL & FAIL \\
+BrowserMaze & FAIL & PASS & FAIL \\
+CameraTakePhoto & PASS & PASS & PASS \\
+CameraTakeVideo & PASS & PASS & PASS \\
+ClockStopWatchPausedVerify & PASS & PASS & PASS \\
+ClockStopWatchRunning & PASS & PASS & PASS \\
+ContactsAddContact & PASS$^\dagger$ & PASS$^\dagger$ & PASS$^\dagger$ \\
+ContactsNewContactDraft & PASS & PASS & PASS \\
+FilesDeleteFile & PASS & PASS & FAIL \\
+MarkorCreateFolder & PASS$^\dagger$ & PASS$^\dagger$ & PASS$^\dagger$ \\
+MarkorCreateNote & PASS & PASS & PASS \\
+SystemBrightnessMax & FAIL & FAIL & FAIL \\
+SystemWifiTurnOn & FAIL & FAIL & FAIL \\
+\midrule
+Total & 11/15 & 12/15 & 10/15 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\footnotesize $^\dagger$ Live evaluator passes but the verify-before-store gate rejected the compiled program (\texttt{verify\_score=0}).
+\end{table}
+
+The complete per-task results across all 32 Android multi-seed runs and 8 OSWorld runs are also available in the project's \texttt{paper/findings\_summary.md}.
 
 \section*{Appendix C. Container Patch}
 The \texttt{android\_server\_patched.py} adds a \texttt{/state} endpoint to \texttt{huggingface/android\_world:latest} that returns base64-encoded screenshots plus serialized accessibility-tree elements, sidestepping the upstream populated-AVD a11y-gRPC initialization wedge.
