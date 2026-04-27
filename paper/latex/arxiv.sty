@@ -1,0 +1,75 @@
+% arxiv.sty — clean arxiv-style preprint formatting
+% Lightweight equivalent of the popular arxiv-style template (Kour et al.).
+% Provides title block, sectional formatting, abstract environment, and
+% paragraph spacing suitable for an arXiv preprint.
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{arxiv}[2026/04/27 v0.1 arXiv preprint style]
+
+% --- Page geometry ---
+\RequirePackage[a4paper,margin=1in]{geometry}
+
+% --- Fonts and microtype for nicer text ---
+\RequirePackage{lmodern}
+\RequirePackage[T1]{fontenc}
+\RequirePackage[utf8]{inputenc}
+\RequirePackage{microtype}
+
+% --- Math and tables ---
+\RequirePackage{amsmath,amsfonts,amssymb}
+\RequirePackage{booktabs}
+\RequirePackage{array}
+\RequirePackage{multirow}
+
+% --- Lists, captions, hyperlinks ---
+\RequirePackage{enumitem}
+\RequirePackage[font=small,labelfont=bf]{caption}
+\RequirePackage{xcolor}
+\definecolor{linkcolor}{rgb}{0.10,0.30,0.65}
+\RequirePackage[colorlinks=true,
+                linkcolor=linkcolor,
+                citecolor=linkcolor,
+                urlcolor=linkcolor]{hyperref}
+
+% --- Section formatting ---
+\RequirePackage{titlesec}
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.5em}{}
+
+% --- Title block ---
+\renewcommand{\maketitle}{%
+  \begingroup
+    \begin{center}
+      {\LARGE \bfseries \@title \par}\vspace{1em}
+      {\large \@author \par}\vspace{0.5em}
+      {\small \@date \par}
+    \end{center}
+    \vspace{1em}
+  \endgroup
+}
+
+% --- Abstract environment ---
+\renewenvironment{abstract}{%
+  \begin{center}{\bfseries Abstract}\end{center}
+  \begin{quote}\small
+}{%
+  \end{quote}\vspace{0.5em}
+}
+
+% --- Paragraph spacing ---
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{1.2em}
+
+% --- Code listings ---
+\RequirePackage{listings}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true,
+}
+
+% --- Tightlist for nice itemize ---
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}

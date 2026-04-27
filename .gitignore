@@ -33,3 +33,14 @@ cache/
 
 # Editor / agent caches
 .claude/
+
+# LaTeX build artifacts (keep .tex, .sty, .bib, .pdf; drop intermediates)
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
