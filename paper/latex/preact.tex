@@ -75,6 +75,8 @@ ActionEngine & State machine via crawl & \emph{Flat-Python generated} & None & R
 
 The architectural commitment that distinguishes PreAct is the second column (\emph{the SM is the runtime}) combined with the fourth (\emph{recompile under verify-gate}). ActionEngine builds a state machine but emits flat Python from it; the state machine is consumed at compile time and the runtime is the generated script. PreAct executes the state machine directly: each state's verification predicate is evaluated against the live UI, and each transition is dispatched to the underlying action backend (XPath click, JSON action, etc.). This direct execution enables (a) per-state verification and graceful fallback, (b) in-place patching when a transition fails, and (c) the verify-before-store gate (which we will argue is empirically necessary for monotonicity).
 
+The deeper distinction concerns \emph{what grows} as the agent gains experience. In Muscle-Mem, AgentRR, and Workflow-Use, the cache or experience store is append-only: every captured trajectory adds a new entry without affecting the existing ones. In ActionEngine, the state machine is built once via crawling and the flat Python is regenerated wholesale on each rebuild; there is no notion of incremental refinement. PreAct's compile-extend-replace loop, by contrast, allows the corpus to \emph{mutate}: a fresh compile with the same dedup signature replaces an older program if it passes the verify-gate. The corpus does not just accumulate---it refines its representation of repeated tasks as the agent encounters them across different parameter values, environments, and sessions. This is the property we mean by ``self-extending executable code corpus'' (\S\ref{sec:intro}): not an append-only cache, but a mutable, verified, directly-executable code library.
+
 \section{System Architecture}
 \label{sec:arch}
 
@@ -524,13 +526,19 @@ The mechanism is partially deterministic. For the most reliable case (Calc formu
 
 Three AndroidWorld tasks (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) and one OSWorld task (LibreOffice Writer macro) fail across all five seeds, both LLM backends (Claude and Gemini), all four guardrail/budget configurations, and both verify-gate conditions. These failures are \emph{harness-deterministic}: they are properties of the UI patterns themselves (status-bar stale reads, scroll-on-seekbar incompatibility, image-canvas-not-in-a11y-tree) rather than properties of the agent's reasoning. They bound the benchmark, not the method.
 
-\subsection{Threats to Validity}
+\subsection{Limitations}
 
-The closure table (Table~\ref{tab:gap-closure}) lists eight closed threats and one out-of-scope. Beyond those, two threats remain that the paper acknowledges:
+The closure table (Table~\ref{tab:gap-closure}) lists eight closed threats and one out-of-scope. Beyond those, we explicitly acknowledge five remaining limitations:
 
-\textbf{Architectural untested.} We did not run an ActionEngine-style flat-script baseline or an untargeted-exploration baseline. The architectural commitments (state-machine-as-executable, task-directed recording) are supported by the working implementation across two platforms but not by direct AB comparison.
+\textbf{(L1) Architectural baselines untested.} We did not run an ActionEngine-style flat-script baseline or an untargeted-exploration baseline. The architectural commitments (state-machine-as-executable, task-directed recording) are supported by the working implementation across two platforms but not by direct AB comparison. Future work could implement an ActionEngine-faithful re-execution path on top of our compile pipeline (compile to the same state machine, then \emph{generate flat Python} at the verify step instead of executing the graph directly) to isolate the effect of the architectural commitment.
 
-\textbf{Generalizability.} OSWorld test\_tiny has only 6 tasks, and AndroidWorld official-15 has 15. While the verify-gate effect replicates cross-platform, the benchmarks themselves are a small sample of computer-using tasks. We acknowledge platform-coverage bias (\#8 in Table~\ref{tab:gap-closure}) as out-of-scope for this paper.
+\textbf{(L2) Benchmark coverage.} OSWorld test\_tiny has only 6 tasks, AndroidWorld official-15 has 15. While the verify-gate effect replicates cross-platform, the benchmarks themselves are a small sample of computer-using tasks. We acknowledge platform-coverage bias (\#8 in Table~\ref{tab:gap-closure}) as out-of-scope for this paper. The relative magnitude of the OSWorld effect is also influenced by the small denominator: 50\,pp on a 6-task subset is mathematically larger than 17\,pp on 15 tasks for the same absolute number of regressions.
+
+\textbf{(L3) Compile cost.} The verify-before-store gate requires a full re-replay and re-evaluation of every compiled program, doubling the wall time of cold runs (since each successful CUA-then-compile is followed by a verify-replay). On AndroidWorld, this translates to approximately 50\% extra wall on cold runs vs.\ a no-verify baseline. The cost is amortized on warm runs (where the corpus retrieves already-verified programs in seconds), but the compile-time cost is real and may matter for high-throughput deployments.
+
+\textbf{(L4) Compile-fidelity rate.} Although our taxonomy audit (\S\ref{sec:eval}) found that compile-fidelity issues affect roughly 28\% of Android programs (16/58) and similar fractions on OSWorld, the compiler itself is an LLM that produces lossy state-machines on a non-trivial fraction of inputs. The verify-gate filters this at storage time, but as the corpus scales, the gate's verify-replay cost (which is proportional to the number of compile attempts, not just stored programs) may become a bottleneck.
+
+\textbf{(L5) LLM nondeterminism in selector.} The agentic Program Selector is itself an LLM call. Across our experiments, selector decisions were stable on identical inputs (the prompt is short and the discrimination problem is usually unambiguous), but selector nondeterminism on borderline cases is a potential source of warm-SR variance that we did not measure directly. A principled selector evaluation (e.g.\ accuracy of program selection given ground-truth task labels) is future work.
 
 \section{Conclusion}
 \label{sec:conclusion}
