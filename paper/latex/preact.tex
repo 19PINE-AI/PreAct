@@ -127,6 +127,36 @@ The high-level loop for any user task $T$ is:
 
 The harness's static Python code defines this loop. The corpus is the variable that grows. Note that step 4's gate is what enables \emph{monotonic} extension: without it, the corpus accumulates lossy compiles that ``run'' under replay (cov$=$100\%) but fail the live evaluator (score$=$0). Section~\ref{sec:eval-gate} demonstrates this empirically.
 
+Algorithm~\ref{alg:harness} states the loop formally.
+
+\begin{algorithm}[t]
+\caption{PreAct verified compile-extend-replace loop}
+\label{alg:harness}
+\begin{algorithmic}[1]
+\Require Task goal $T$, environment $\textit{env}$, program corpus $C$
+\State $P \gets \textsc{Selector}(T, C)$ \Comment{LLM-agentic; may return $\bot$}
+\State $r \gets \textsc{None}$
+\If{$P \neq \bot$}
+  \State $r \gets \textsc{Replay}(P, \textit{env})$ \Comment{walk graph; verify each state predicate}
+  \If{$r.\textit{success} \land r.\textit{cov} > \tau$}
+    \State \textbf{return} $r$ \Comment{warm path: trusted replay}
+  \EndIf
+\EndIf
+\State $r \gets \textsc{CUA}(T, \textit{env})$ \Comment{or hybrid: continue from where replay broke}
+\If{$\neg r.\textit{success}$} \textbf{return} $r$ \EndIf
+\State $P' \gets \textsc{Compile}(r.\textit{trace})$ \Comment{LLM-driven trace $\to$ state-machine}
+\State $\textit{env}' \gets \textsc{Reset}(\textit{env}, T)$ \Comment{independent re-evaluation environment}
+\State $r' \gets \textsc{Replay}(P', \textit{env}')$
+\State $\textit{score}' \gets \textsc{Evaluate}(\textit{env}', T)$
+\If{$r'.\textit{success} \land \textit{score}' \geq 1.0$} \Comment{double gate}
+  \State $C \gets \textsc{Upsert}(C, P')$ \Comment{insert by dedup signature; replace if collision}
+\EndIf
+\State \textbf{return} $r$
+\end{algorithmic}
+\end{algorithm}
+
+Three properties of Algorithm~\ref{alg:harness} are worth highlighting. First, \textbf{the harness's only side effect on $C$ is line 16's $\textsc{Upsert}$ call, gated by line 15's double predicate}: programs enter the corpus only after independent re-validation. Second, \textbf{the corpus grows monotonically in expectation}: each $\textsc{Upsert}$ call adds a program that has independently re-passed both replay and evaluation, so the corpus quality cannot decrease across $\textsc{Upsert}$ events. Third, \textbf{the corpus mutates via $\textsc{Upsert}$, not just append}: a fresh program with the same dedup signature replaces an older one, allowing the corpus to refine its representation of repeated tasks rather than just accumulate variants.
+
 \subsection{State-Machine Programs}
 
 A program is a tuple $P = (S, T, M, V)$:
@@ -522,7 +552,35 @@ Future work falls in three directions:
 
 \appendix
 \section*{Appendix A. Computer-Action Schema}
-The full JSON action schema and per-platform backend mappings are described in the project's \texttt{DESIGN.md} (\S Appendix A), reproduced here for completeness. (Omitted in this draft.)
+
+Each transition's \texttt{action} field must be one of the action types in Table~\ref{tab:actions}. Action types are translated to platform-specific backends at execution time: \texttt{action\_click} on Android maps to a \texttt{JSONAction}-formatted touch with the resolved element's $(x, y)$ coordinates; on OSWorld it maps to \texttt{pyautogui.click(x, y)}. The cross-platform schema enables the same compiled state-machine program to run on either backend, although in practice each task's compile is platform-specific because the verification predicates use platform-specific selector dialects (Android XPath vs.\ pyautogui screenshot regions).
+
+\begin{table}[h]
+\centering
+\caption{Computer action types in PreAct's program schema. Each transition uses exactly one type.}
+\label{tab:actions}
+\small
+\begin{tabular}{@{}lp{8.5cm}@{}}
+\toprule
+Action type & Description and required fields \\
+\midrule
+\texttt{action\_click} & Click on a UI element. \texttt{target}: selector. \\
+\texttt{action\_long\_press} & Long-press on a UI element. \texttt{target}: selector. \\
+\texttt{input\_text} & Type text into a focused element. \texttt{text}: literal or \$param. \texttt{index}: optional element id. \\
+\texttt{action\_keypress} & Send a key event. \texttt{key}: \texttt{Enter}, \texttt{Back}, \texttt{Tab}, etc. \\
+\texttt{scroll} & Scroll a region. \texttt{direction}: \texttt{up}/\texttt{down}/\texttt{left}/\texttt{right}. Optional \texttt{index} for sub-element scroll. \\
+\texttt{open\_app} & Launch an application by name. \texttt{app\_name}: string. \\
+\texttt{wait} & Sleep for the platform's default delay. \\
+\texttt{navigate\_back} & Send the system Back gesture (Android) or browser-back equivalent. \\
+\texttt{navigate\_home} & Return to the home screen / desktop. \\
+\texttt{inspect\_text} & Read the value at a selector. \texttt{store\_result\_as}: variable name. Used by QA-style tasks. \\
+\texttt{answer} & Emit a final textual answer. \texttt{text}: literal or computed. \\
+\texttt{status} & Terminate the program. \texttt{goal\_status}: \texttt{complete}/\texttt{infeasible}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \texttt{description} field on each transition (one short sentence) is consumed by the agentic Program Selector (\S\ref{sec:arch}) when judging whether a stored program applies to the current task. Selectors are written to be parameter-aware (e.g.\ ``type the filename (parameter \texttt{filename})'' rather than ``type text''), since the program's \texttt{parameters} list is what the LLM uses to bind the program's slots to the new task's instance values at retrieval time.
 
 \section*{Appendix B. Per-Task Multi-Seed Data}
 
