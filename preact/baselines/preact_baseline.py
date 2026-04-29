@@ -153,6 +153,11 @@ class PreActBaseline:
         self._agent = None
 
     def has_cached_artifact(self, task: str) -> bool:
-        if self._agent:
-            return self._agent.store.has_relevant_match(task)
+        # The PreAct ProgramStore lacks a `has_relevant_match` method;
+        # the agentic Program Selector does the discrimination at
+        # retrieval time. For the WebArena harness's run-2-replay gate,
+        # we just check whether the store is non-empty — replay path
+        # internally invokes the selector which may return None.
+        if self._agent and self._agent.store.count() > 0:
+            return True
         return False

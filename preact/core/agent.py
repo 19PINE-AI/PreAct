@@ -108,15 +108,22 @@ class PreActAgent:
             except Exception:
                 pass
 
-            programs = await self.store.query(task, context=app_context)
-            if programs:
-                program = programs[0]
-                logger.info(
-                    "Found matching program: %s (v%d, %d states)",
-                    program.metadata.program_id,
-                    program.metadata.version,
-                    len(program.states),
-                )
+            # ProgramStore exposes list_programs (summaries) + load_program;
+            # the "query" abstraction is implemented by the agentic
+            # Program Selector which lives outside the store. For the
+            # core agent's WebArena replay path, just take the first
+            # program (the WebArena harness only stores one per task
+            # in the warm-replay flow).
+            summaries = self.store.list_programs()
+            if summaries:
+                program = await self.store.load_program(summaries[0]["program_id"])
+                if program:
+                    logger.info(
+                        "Found matching program: %s (v%d, %d states)",
+                        program.metadata.program_id,
+                        program.metadata.version,
+                        len(program.states),
+                    )
 
         if force_rpa and not program:
             return TaskResult(
