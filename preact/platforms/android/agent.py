@@ -572,6 +572,13 @@ class PreActAndroidAgent:
                 if fat_val == "action_navigate":
                     skip_verify = True
 
+            # PREACT_RUNTIME_MODE=flat_script (Exp A ablation): bypass
+            # per-state verification entirely to mimic ActionEngine-style
+            # linear flat-script execution.
+            import os
+            if os.environ.get('PREACT_RUNTIME_MODE', 'state_machine').lower() == 'flat_script':
+                skip_verify = True
+
             # Verify current state
             if current_state.verification.type == VerificationType.EXPECT_ELEMENT and not skip_verify:
                 selector = current_state.verification.xpath

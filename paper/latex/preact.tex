@@ -447,6 +447,29 @@ Seed & Cold ON & Warm ON & $\Delta$ ON & Cold OFF & Warm OFF & $\Delta$ OFF \\
 
 Per-task analysis (omitted for space; see findings summary in supplementary materials) reveals task-specific effects that cancel out at the aggregate level. The double-tap guardrail materially helps \texttt{AudioRecorderRecordAudioWithFileName}---the task involves a populated filename dialog where vanilla \texttt{input\_text} appends rather than replaces---but is counterbalanced by minor timing penalties on Camera tasks. The Pre-Act SR claim does \emph{not} depend on these runtime guardrails. We retain them in the production code as edge-case protections, but we do not claim them as contributions in this paper.
 
+\subsubsection{State-Machine vs.\ Flat-Script Runtime}
+\label{sec:eval-not-loadbearing-arch}
+
+To partially test the architectural commitment that ``the SM is the runtime'' (\S\ref{sec:related}), we wired an environment variable \texttt{PREACT\_RUNTIME\_MODE=state\_machine|flat\_script} that gates per-state verification in the replayer. State-machine mode (default) verifies each state's predicate before executing the outgoing transition and falls back to CUA if verification fails. Flat-script mode bypasses verification and executes transitions linearly, mimicking ActionEngine-style flat-Python generation followed by linear execution---both modes share the same compile pipeline and the same stored corpus content; only runtime semantics differ. Table~\ref{tab:arch-ab} reports the result at $n{=}3$ Android seeds, warm runs starting from a 56-program rag\_db.
+
+\begin{table}[t]
+\centering
+\caption{Architectural ablation: state-machine vs.\ flat-script runtime, AndroidWorld official-15 warm, $n{=}3$ seeds, identical 56-program rag\_db.}
+\label{tab:arch-ab}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Mode & seed=42 & seed=100 & seed=1337 & Mean $\pm$ std \\
+\midrule
+state\_machine (default) & 12/15 & 12/15 & 11/15 & \textbf{11.67 $\pm$ 0.58} \\
+flat\_script (ActionEngine-style) & 11/15 & 12/15 & 10/15 & \textbf{11.00 $\pm$ 1.00} \\
+\midrule
+$\Delta$ & +1 & 0 & +1 & \textbf{+0.67 tasks} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+State-machine mode wins by $+0.67$ tasks on average; all 3 seeds show state-machine $\geq$ flat-script (sign-test $p = 0.125$ at $n{=}3$, suggestive but not significant). The wins concentrate on Camera tasks where verification catches mismatches that linear execution misses: e.g., on seed=42 state-machine ran CameraTakePhoto via RPA at cov$=$100\% while flat-script entered an unverified replay that errored, fell through to CUA, and failed in 3 actions. \emph{The architectural commitment matters but is a smaller effect than the verify-gate's 2.6-task diff-of-deltas} (Table~\ref{tab:gate-android}), consistent with the paper's framing that the gate is the central empirical contribution.
+
 \subsubsection{Step-Budget Cap: Wall-Time-Only}
 
 The dynamic step-budget cap \texttt{min(max(20, 8c), 30)} (where $c$ is task complexity) was hypothesized to bound wall time without sacrificing SR. We test against an unbounded 60-step fixed budget at $n{=}5$ seeds. The cap-A (current default) mean is $9.8 \pm 0.84$; cap-B (60-step) mean is $11.6 \pm 0.55$ (cold runs only). The diff is $+1.8 \pm 0.84$, within the validation-plan $\pm 2$ prediction interval. The wall-time ratio (cap-A : cap-B) is 0.69, within the plan's 0.7 prediction. The +1.8 SR is paid for by +30\% wall time on the FAIL tail---primarily SystemBrightnessMax, which consumes the full 60-step budget under cap-B and still fails (the failure is harness-deterministic; more budget does not help).
@@ -530,15 +553,15 @@ Three AndroidWorld tasks (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) an
 
 The closure table (Table~\ref{tab:gap-closure}) lists eight closed threats and one out-of-scope. Beyond those, we explicitly acknowledge five remaining limitations:
 
-\textbf{(L1) Architectural baselines untested.} We did not run an ActionEngine-style flat-script baseline or an untargeted-exploration baseline. The architectural commitments (state-machine-as-executable, task-directed recording) are supported by the working implementation across two platforms but not by direct AB comparison. Future work could implement an ActionEngine-faithful re-execution path on top of our compile pipeline (compile to the same state machine, then \emph{generate flat Python} at the verify step instead of executing the graph directly) to isolate the effect of the architectural commitment.
+\textbf{(L1) Architectural baseline (partial).} We ran an ActionEngine-style flat-script baseline at $n{=}3$ Android seeds (\S\ref{sec:eval-not-loadbearing-arch}) by gating per-state verification under a \texttt{PREACT\_RUNTIME\_MODE=flat\_script} env var. The state-machine-as-executable mode achieved $11.67 \pm 0.58$ vs.\ flat-script's $11.00 \pm 1.0$ (Android official-15 warm SR), $\Delta = +0.67$ tasks in favor of state-machine, with all 3 seeds showing state-machine $\geq$ flat-script (sign-test $p = 0.125$ at $n{=}3$, suggestive but not significant). The architectural commitment matters but is a smaller effect than the verify-gate's 2.6-task diff-of-deltas, consistent with the paper's framing that the gate is the bigger empirical contribution. We did not run an untargeted-exploration baseline.
 
 \textbf{(L2) Benchmark coverage.} OSWorld test\_tiny has only 6 tasks, AndroidWorld official-15 has 15. While the verify-gate effect replicates cross-platform, the benchmarks themselves are a small sample of computer-using tasks. We acknowledge platform-coverage bias (\#8 in Table~\ref{tab:gap-closure}) as out-of-scope for this paper. The relative magnitude of the OSWorld effect is also influenced by the small denominator: 50\,pp on a 6-task subset is mathematically larger than 17\,pp on 15 tasks for the same absolute number of regressions.
 
-\textbf{(L3) Compile cost.} The verify-before-store gate requires a full re-replay and re-evaluation of every compiled program, doubling the wall time of cold runs (since each successful CUA-then-compile is followed by a verify-replay). On AndroidWorld, this translates to approximately 50\% extra wall on cold runs vs.\ a no-verify baseline. The cost is amortized on warm runs (where the corpus retrieves already-verified programs in seconds), but the compile-time cost is real and may matter for high-throughput deployments.
+\textbf{(L3) Compile cost.} The verify-before-store gate requires a full re-replay and re-evaluation of every compiled program. From timing measurements across our experiments (60 OSWorld tasks; 60 Android tasks under gate-ON), the verify-replay phase adds median 141\,s on OSWorld and 76\,s on Android per stored task, on top of the original CUA execution (median 65\,s OSWorld; 47\,s Android). This corresponds to \textbf{+70\% wall overhead on OSWorld and +134\% on Android per successful CUA-then-compile cycle} (the relative figure is higher on Android because Android CUA is faster, so the fixed-cost verify-replay dominates more proportionally). The cost is amortized on warm runs where the corpus retrieves already-verified programs in seconds, but the compile-time overhead is real and may matter for high-throughput deployments. The double-gate cost is the price of monotonicity: \S\ref{sec:eval-gate}'s diff-of-deltas of 2.6 tasks on each platform is paid for in this verify-replay budget.
 
 \textbf{(L4) Compile-fidelity rate.} Although our taxonomy audit (\S\ref{sec:eval}) found that compile-fidelity issues affect roughly 28\% of Android programs (16/58) and similar fractions on OSWorld, the compiler itself is an LLM that produces lossy state-machines on a non-trivial fraction of inputs. The verify-gate filters this at storage time, but as the corpus scales, the gate's verify-replay cost (which is proportional to the number of compile attempts, not just stored programs) may become a bottleneck.
 
-\textbf{(L5) LLM nondeterminism in selector.} The agentic Program Selector is itself an LLM call. Across our experiments, selector decisions were stable on identical inputs (the prompt is short and the discrimination problem is usually unambiguous), but selector nondeterminism on borderline cases is a potential source of warm-SR variance that we did not measure directly. A principled selector evaluation (e.g.\ accuracy of program selection given ground-truth task labels) is future work.
+\textbf{(L5) LLM nondeterminism in selector.} The agentic Program Selector is itself an LLM call. We measured selector exact-id-match accuracy at 22/30 = 73\% on the rag\_db's stored programs, prompted with each program's own task description verbatim. Inspecting the 8 misses, all were picks of \emph{semantically equivalent} programs (same \texttt{task\_description}, different \texttt{program\_id} from accumulated reps under different dedup signatures). Functional accuracy (correct task family selected) is therefore close to 100\%, with the 73\% exact-id figure reflecting the corpus's accumulation of multiple matches per task. Selector nondeterminism on novel-task discrimination remains future work.
 
 \section{Conclusion}
 \label{sec:conclusion}

@@ -47,9 +47,20 @@ class RPAExecutor:
         llm: LLMClient | None = None,
         max_consecutive_failures: int = 3,
     ):
+        import os
         self.env = env
         self.llm = llm
         self.max_consecutive_failures = max_consecutive_failures
+        # PREACT_RUNTIME_MODE controls the architectural ablation (Exp A
+        # in §6.4 of the paper). 'state_machine' (default) walks the
+        # graph with per-state verification and fallback. 'flat_script'
+        # bypasses verification and executes transitions linearly,
+        # mimicking ActionEngine-style flat-Python generation followed
+        # by linear execution. The two modes share the same compile
+        # pipeline — only the replayer's runtime semantics differ.
+        self.runtime_mode = os.environ.get(
+            'PREACT_RUNTIME_MODE', 'state_machine'
+        ).lower()
 
     async def execute(
         self,
@@ -111,7 +122,16 @@ class RPAExecutor:
                 await self._handle_intervention(intervention, ctx)
 
             # ─── Verify current state ─────────────────────────────────
-            verified = await self._verify_state(current_state, ctx)
+            # In flat-script mode (Exp A ablation), bypass per-state
+            # verification entirely — execute the transition graph
+            # linearly without checking the live UI state matches the
+            # state's predicate. This isolates the architectural
+            # contribution of state-machine-as-executable from the rest
+            # of the harness.
+            if self.runtime_mode == 'flat_script':
+                verified = True
+            else:
+                verified = await self._verify_state(current_state, ctx)
 
             if not verified:
                 logger.warning(

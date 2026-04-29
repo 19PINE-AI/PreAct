@@ -465,8 +465,14 @@ class PreActOSAgent:
                     graph_coverage=1.0,
                 )
 
+            # PREACT_RUNTIME_MODE=flat_script (Exp A ablation): bypass
+            # per-state verification entirely to mimic ActionEngine-style
+            # flat-script linear execution.
+            import os
+            _flat_script = os.environ.get('PREACT_RUNTIME_MODE', 'state_machine').lower() == 'flat_script'
+
             # Verify current state
-            if current_state.verification.type == VerificationType.EXPECT_ELEMENT:
+            if not _flat_script and current_state.verification.type == VerificationType.EXPECT_ELEMENT:
                 selector = current_state.verification.xpath
                 if selector:
                     for pname, pval in parameters.items():
