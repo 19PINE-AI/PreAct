@@ -241,6 +241,39 @@ async def run_system_benchmark(
         )
         sys.stderr.flush()
 
+        # ---- Verify-before-store gate (Tier-3 #1 AB) ----
+        # Mirrors the Android/OSWorld double-gate semantics: if a program
+        # was just stored (CUA reported success and compile fired),
+        # run a fresh-state verify-replay and require score >= 1.0 to keep it.
+        # Programs that fail verification (whether r1 evaluator passed or not)
+        # are deleted. Without the gate, any successfully-compiled program
+        # enters the corpus unconditionally.
+        import os as _os
+        _gate_on = _os.environ.get('PREACT_VERIFY_BEFORE_STORE', 'on').lower() != 'off'
+        if (_gate_on and getattr(system, '_agent', None)
+                and system.has_cached_artifact(task["intent"])):
+            # Re-run replay on a fresh env state and re-evaluate
+            verify = await run_task_with_eval(
+                system, task, "replay", auth_states, timeout
+            )
+            if verify["score"] < 1.0:
+                logger.info(
+                    "    [verify-gate] Δreplay-fail: replay_score=%.1f, cov=%.0f%% — discarding compile",
+                    verify["score"], verify.get("coverage", 0) * 100,
+                )
+                # Empty the store (clears the just-stored program)
+                try:
+                    if system._agent and system._agent.store:
+                        for s in list(system._agent.store.list_programs()):
+                            await system._agent.store.delete(s["program_id"])
+                except Exception as e:
+                    logger.warning("    [verify-gate] delete failed: %s", e)
+            else:
+                logger.info(
+                    "    [verify-gate] replay-verified: replay_score=%.1f",
+                    verify["score"],
+                )
+
         # ---- Run 2: Replay ----
         if not system.has_cached_artifact(task["intent"]):
             logger.info("  [%s] Run 2: No artifact — skip", tid)
