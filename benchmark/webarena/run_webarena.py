@@ -221,6 +221,17 @@ async def run_system_benchmark(
         tid = task["task_id"]
         intent = task["intent"][:80]
 
+        # Snapshot corpus state before Run 1 so we can identify
+        # any program newly added by Run 1's compile path.
+        pre_run1_pids: set[str] = set()
+        if getattr(system, '_agent', None) and system._agent.store:
+            try:
+                pre_run1_pids = {
+                    s["program_id"] for s in system._agent.store.list_programs()
+                }
+            except Exception:
+                pre_run1_pids = set()
+
         # ---- Run 1: Exploration ----
         logger.info(
             "  [%d/%d] Task %s Run 1: %s",
@@ -242,36 +253,40 @@ async def run_system_benchmark(
         sys.stderr.flush()
 
         # ---- Verify-before-store gate (Tier-3 #1 AB) ----
-        # Mirrors the Android/OSWorld double-gate semantics: if a program
-        # was just stored (CUA reported success and compile fired),
-        # run a fresh-state verify-replay and require score >= 1.0 to keep it.
-        # Programs that fail verification (whether r1 evaluator passed or not)
-        # are deleted. Without the gate, any successfully-compiled program
-        # enters the corpus unconditionally.
+        # Mirrors the Android/OSWorld double-gate semantics: if Run 1's
+        # compile path stored a NEW program, run a fresh-state verify-replay
+        # and require score >= 1.0 to keep the new program. On failure,
+        # delete *only* the newly-stored program(s); pre-existing verified
+        # programs in the corpus are unaffected.
         import os as _os
         _gate_on = _os.environ.get('PREACT_VERIFY_BEFORE_STORE', 'on').lower() != 'off'
-        if (_gate_on and getattr(system, '_agent', None)
-                and system.has_cached_artifact(task["intent"])):
-            # Re-run replay on a fresh env state and re-evaluate
+        new_pids: set[str] = set()
+        if _gate_on and getattr(system, '_agent', None) and system._agent.store:
+            try:
+                post_run1_pids = {
+                    s["program_id"] for s in system._agent.store.list_programs()
+                }
+                new_pids = post_run1_pids - pre_run1_pids
+            except Exception:
+                new_pids = set()
+        if _gate_on and new_pids:
             verify = await run_task_with_eval(
                 system, task, "replay", auth_states, timeout
             )
             if verify["score"] < 1.0:
                 logger.info(
-                    "    [verify-gate] Δreplay-fail: replay_score=%.1f, cov=%.0f%% — discarding compile",
-                    verify["score"], verify.get("coverage", 0) * 100,
+                    "    [verify-gate] Δreplay-fail: replay_score=%.1f, cov=%.0f%% — deleting %d new program(s)",
+                    verify["score"], verify.get("coverage", 0) * 100, len(new_pids),
                 )
-                # Empty the store (clears the just-stored program)
-                try:
-                    if system._agent and system._agent.store:
-                        for s in list(system._agent.store.list_programs()):
-                            await system._agent.store.delete(s["program_id"])
-                except Exception as e:
-                    logger.warning("    [verify-gate] delete failed: %s", e)
+                for pid in new_pids:
+                    try:
+                        await system._agent.store.delete(pid)
+                    except Exception as e:
+                        logger.warning("    [verify-gate] delete failed for %s: %s", pid, e)
             else:
                 logger.info(
-                    "    [verify-gate] replay-verified: replay_score=%.1f",
-                    verify["score"],
+                    "    [verify-gate] replay-verified: replay_score=%.1f (kept %d new program(s))",
+                    verify["score"], len(new_pids),
                 )
 
         # ---- Run 2: Replay ----
