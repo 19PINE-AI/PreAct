@@ -309,7 +309,7 @@ Figure~\ref{fig:diff-of-deltas} previews the load-bearing finding: the verify-ga
   \node[font=\scriptsize] at (0.25,-1.85) {gate};
   \node[font=\scriptsize] at (0.25,-2.05) {OFF};
 \end{scope}
-\begin{scope}[xshift=5cm]
+\begin{scope}[xshift=4.2cm]
   \node[anchor=south] at (0,3.6) {\textbf{OSWorld (n=5)}};
   \draw[->] (-1.4,0) -- (1.6,0);
   \draw[->] (0,-3) -- (0,3.5);
@@ -328,8 +328,27 @@ Figure~\ref{fig:diff-of-deltas} previews the load-bearing finding: the verify-ga
   \node[font=\scriptsize] at (0.25,-2.85) {gate};
   \node[font=\scriptsize] at (0.25,-3.05) {OFF};
 \end{scope}
+\begin{scope}[xshift=8.4cm]
+  \node[anchor=south] at (0,3.6) {\textbf{WebArena (n=2+2)}};
+  \draw[->] (-1.4,0) -- (1.6,0);
+  \draw[->] (0,-5.5) -- (0,3.5);
+  \foreach \y/\lab in {-5/-5,-4/-4,-3/-3,-2/-2,-1/-1,0/0,1/+1,2/+2,3/+3} {
+    \draw[gray!50] (-0.1,\y) -- (0.1,\y);
+    \node[font=\scriptsize] at (-0.25,\y) [left] {\lab};
+  }
+  \fill[blue!60] (-0.45,0) rectangle (-0.05,-1.5);
+  \node[font=\scriptsize] at (-0.25,-1.65) {-1.5};
+  \fill[red!60] (0.05,0) rectangle (0.45,-4.5);
+  \node[font=\scriptsize] at (0.25,-4.65) {-4.5};
+  \draw[<->,thick] (0.55,-1.5) -- (0.55,-4.5);
+  \node[font=\scriptsize, anchor=west] at (0.6,-3.0) {3 tasks};
+  \node[font=\scriptsize] at (-0.25,-5.05) {gate};
+  \node[font=\scriptsize] at (-0.25,-5.25) {ON};
+  \node[font=\scriptsize] at (0.25,-5.05) {gate};
+  \node[font=\scriptsize] at (0.25,-5.25) {OFF};
+\end{scope}
 \end{tikzpicture}
-\caption{Cold-to-warm SR deltas under verify-gate ON vs OFF, on AndroidWorld official-15 ($n{=}5$ seeds) and OSWorld test\_tiny ($n{=}5$ reps). \textbf{The diff-of-deltas is identically 2.6 tasks on both platforms} (and 3 tasks on the WebArena 12-task subset, $n{=}2{+}2$ symmetric; \S\ref{sec:eval-webarena}), despite different LLM backends (Gemini 3 Flash on Android, Claude Sonnet 4.6 on OSWorld and WebArena) and different task subsets. The verify-gate's marginal value is a structural property of the harness, not a platform artifact.}
+\caption{Cold-to-warm SR deltas under verify-gate ON vs OFF, on AndroidWorld official-15 ($n{=}5$ seeds), OSWorld test\_tiny ($n{=}5$ reps), and WebArena shopping\_admin 12-task subset ($n{=}2{+}2$ symmetric). \textbf{The diff-of-deltas is 2.6 tasks on Android, 2.6 tasks on OSWorld, and 3 tasks on WebArena}, despite different LLM backends (Gemini 3 Flash on Android, Claude Sonnet 4.6 on OSWorld and WebArena) and different task subsets. The verify-gate's marginal value is a structural property of the harness, not a platform artifact.}
 \label{fig:diff-of-deltas}
 \end{figure}
 
