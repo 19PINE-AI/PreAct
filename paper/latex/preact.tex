@@ -1,5 +1,8 @@
 \documentclass[11pt]{article}
 \usepackage{arxiv}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{patterns}
 
 \title{PreAct: A Verified Self-Extending Executable Code Corpus\\for Computer-Using Agents}
 
@@ -189,54 +192,11 @@ The opposite failure mode---\texttt{replay\_ok=True} with \texttt{verify\_score=
 
 \subsection{The Agentic Program Selector}
 
-The Program Selector is itself an LLM-driven component. We deliberately avoided embedding-based RAG: program descriptions are short, parameter schemas are structured, and the discrimination problem (does this stored program apply to the current task?) is a reasoning task, not a similarity task. The selector receives the goal, the available programs (titles + descriptions + parameter schemas), and chooses via a tool call. Implementation details in Appendix~A.
+The Program Selector is itself an LLM-driven component. We deliberately avoided embedding-based RAG: program descriptions are short, parameter schemas are structured, and the discrimination problem (does this stored program apply to the current task?) is a reasoning task, not a similarity task. The selector receives the goal, the available programs (titles + descriptions + parameter schemas), and chooses via a tool call. Implementation details in Appendix~B; a worked program example in Appendix~A.
 
 \subsection{The CUA Fallback}
 
 When the selector returns ``no candidate'' or replay fails, the harness invokes CUA. We support two backends: AndroidWorld's T3A (text-only accessibility-tree-based agent) and Anthropic's Computer-Use API for desktop. \emph{Critically, the production T3A path uses the verbatim upstream T3A prompt with no Pre-Act-specific additions} (we will return to this in \S\ref{sec:eval-not-loadbearing}).
-
-\section{Concrete Program Example}
-\label{sec:program}
-
-To make the state-machine representation concrete, we present a compiled program for the AndroidWorld \texttt{ContactsNewContactDraft} task (parameters: first name, last name, phone number, phone label).
-
-\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,language={}]
-{
-  "metadata": {
-    "task_description": "Go to the new contact screen and enter the following details",
-    "application_context": "com.google.android.contacts",
-    "parameters": ["first_name", "last_name", "phone_number", "phone_label"],
-    "dedup_signature": "contacts_new_draft_4param"
-  },
-  "states": [
-    {"id": "home", "verification": {"type": "expect_element", "xpath": "resource_id=...launcher", "timeout_ms": 3000}},
-    {"id": "contacts_main", "verification": {"type": "expect_element", "xpath": "package=com.google.android.contacts", "timeout_ms": 5000}},
-    {"id": "new_contact_form", "verification": {"type": "expect_element", "xpath": "resource_id=name_field", "timeout_ms": 3000}},
-    {"id": "form_filled", "verification": {"type": "expect_element", "xpath": "text=$first_name $last_name", "timeout_ms": 2000}},
-    {"id": "draft_saved", "verification": {"type": "terminal_state"}}
-  ],
-  "transitions": [
-    {"from": "home", "to": "contacts_main",
-     "action": {"type": "open_app", "app_name": "Contacts",
-                "description": "open the Contacts app"}},
-    {"from": "contacts_main", "to": "new_contact_form",
-     "action": {"type": "action_click", "target": "content_desc=Create new contact",
-                "description": "tap the Create new contact button"}},
-    {"from": "new_contact_form", "to": "form_filled",
-     "action": {"type": "input_text", "text": "$first_name $last_name", "index": 1,
-                "description": "type the contact's first and last name (parameters)"}},
-    /* ... three more transitions for phone number, label, save ... */
-    {"from": "form_filled", "to": "draft_saved",
-     "action": {"type": "action_click", "target": "content_desc=Save",
-                "description": "tap Save to commit the new contact draft"}}
-  ],
-  "human_interventions": []
-}
-\end{lstlisting}
-
-A few details worth noting. First, the verification predicate of each state is an XPath/accessibility-tree pattern that must hold on the live UI; replay halts and falls through to CUA if a predicate fails. Second, parameters (\$first\_name, \$phone\_number, etc.) are inferred at compile time from the live trace: any input text that matches a task-description placeholder is parameterized so the program generalizes across instances. Third, every transition carries a one-sentence \texttt{description} field that the selector reads when judging whether the program applies to a new task.
-
-The state graph here is tree-like, but more complex tasks (delete-confirmation dialogs, navigation that branches on app version) compile into graphs with multiple outgoing transitions per state, where the state's verification predicate selects which branch is active. We do not show such graphs here for space; see Appendix~B for examples drawn from the corpus.
 
 \section{Empirical Validation}
 \label{sec:eval}
@@ -289,66 +249,58 @@ Figure~\ref{fig:diff-of-deltas} previews the load-bearing finding: the verify-ga
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}[font=\small]
-\begin{scope}[xshift=0cm]
-  \node[anchor=south] at (0,3.6) {\textbf{Android (n=5)}};
-  \draw[->] (-1.4,0) -- (1.6,0); \node at (1.65,0) [right] {};
-  \draw[->] (0,-2) -- (0,3.5);
-  \foreach \y/\lab in {-2/-2,-1/-1,0/0,1/+1,2/+2,3/+3} {
-    \draw[gray!50] (-0.1,\y) -- (0.1,\y);
-    \node[font=\scriptsize] at (-0.25,\y) [left] {\lab};
-  }
-  \fill[blue!60] (-0.45,0) rectangle (-0.05,1.2);
-  \node[font=\scriptsize] at (-0.25,1.35) {+1.2};
-  \fill[red!60] (0.05,0) rectangle (0.45,-1.4);
-  \node[font=\scriptsize] at (0.25,-1.55) {-1.4};
-  \draw[<->,thick] (0.55,1.2) -- (0.55,-1.4);
-  \node[font=\scriptsize, anchor=west] at (0.6,-0.1) {2.6 tasks};
-  \node[font=\scriptsize] at (-0.25,-1.85) {gate};
-  \node[font=\scriptsize] at (-0.25,-2.05) {ON};
-  \node[font=\scriptsize] at (0.25,-1.85) {gate};
-  \node[font=\scriptsize] at (0.25,-2.05) {OFF};
-\end{scope}
-\begin{scope}[xshift=4.2cm]
-  \node[anchor=south] at (0,3.6) {\textbf{OSWorld (n=5)}};
-  \draw[->] (-1.4,0) -- (1.6,0);
-  \draw[->] (0,-3) -- (0,3.5);
-  \foreach \y/\lab in {-3/-3,-2/-2,-1/-1,0/0,1/+1,2/+2,3/+3} {
-    \draw[gray!50] (-0.1,\y) -- (0.1,\y);
-    \node[font=\scriptsize] at (-0.25,\y) [left] {\lab};
-  }
-  \fill[blue!60] (-0.45,0) rectangle (-0.05,0.2);
-  \node[font=\scriptsize] at (-0.25,0.35) {+0.2};
-  \fill[red!60] (0.05,0) rectangle (0.45,-2.4);
-  \node[font=\scriptsize] at (0.25,-2.55) {-2.4};
-  \draw[<->,thick] (0.55,0.2) -- (0.55,-2.4);
-  \node[font=\scriptsize, anchor=west] at (0.6,-1.1) {2.6 tasks};
-  \node[font=\scriptsize] at (-0.25,-2.85) {gate};
-  \node[font=\scriptsize] at (-0.25,-3.05) {ON};
-  \node[font=\scriptsize] at (0.25,-2.85) {gate};
-  \node[font=\scriptsize] at (0.25,-3.05) {OFF};
-\end{scope}
-\begin{scope}[xshift=8.4cm]
-  \node[anchor=south] at (0,3.6) {\textbf{WebArena (n=2+2)}};
-  \draw[->] (-1.4,0) -- (1.6,0);
-  \draw[->] (0,-5.5) -- (0,3.5);
-  \foreach \y/\lab in {-5/-5,-4/-4,-3/-3,-2/-2,-1/-1,0/0,1/+1,2/+2,3/+3} {
-    \draw[gray!50] (-0.1,\y) -- (0.1,\y);
-    \node[font=\scriptsize] at (-0.25,\y) [left] {\lab};
-  }
-  \fill[blue!60] (-0.45,0) rectangle (-0.05,-4.0);
-  \node[font=\scriptsize] at (-0.25,-4.15) {-4.0};
-  \fill[red!60] (0.05,0) rectangle (0.45,-5.75);
-  \node[font=\scriptsize] at (0.25,-5.9) {-5.75};
-  \draw[<->,thick] (0.55,-4.0) -- (0.55,-5.75);
-  \node[font=\scriptsize, anchor=west] at (0.6,-4.85) {1.75 tasks};
-  \node[font=\scriptsize] at (-0.25,-5.05) {gate};
-  \node[font=\scriptsize] at (-0.25,-5.25) {ON};
-  \node[font=\scriptsize] at (0.25,-5.05) {gate};
-  \node[font=\scriptsize] at (0.25,-5.25) {OFF};
-\end{scope}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\textwidth,
+    height=6.2cm,
+    ybar=2pt,
+    bar width=14pt,
+    enlarge x limits=0.22,
+    ymin=-8.2, ymax=3.0,
+    ylabel={Cold$\to$warm $\Delta$ (tasks)},
+    ylabel style={font=\small},
+    symbolic x coords={Android,OSWorld,WebArena},
+    xtick=data,
+    xtick style={draw=none},
+    xticklabel style={font=\small},
+    yticklabel style={font=\footnotesize},
+    ytick={-8,-6,-4,-2,0,2},
+    grid=major,
+    grid style={dashed, gray!25},
+    axis lines=left,
+    legend style={
+        at={(0.5,-0.20)}, anchor=north,
+        legend columns=2, draw=none, font=\footnotesize,
+        /tikz/every even column/.append style={column sep=0.6cm}
+    },
+]
+\addplot+[draw=blue!70!black, fill=blue!55,
+          error bars/.cd, y dir=both, y explicit,
+          error bar style={black, thick}] coordinates {
+    (Android,    1.20) +- (0,0.45)
+    (OSWorld,    0.20) +- (0,0.45)
+    (WebArena,  -4.00) +- (0,2.94)
+};
+\addplot+[draw=red!70!black, fill=red!55,
+          error bars/.cd, y dir=both, y explicit,
+          error bar style={black, thick}] coordinates {
+    (Android,   -1.40) +- (0,0.89)
+    (OSWorld,   -2.40) +- (0,0.55)
+    (WebArena,  -5.75) +- (0,1.71)
+};
+\legend{Gate ON,Gate OFF}
+\node[font=\footnotesize, anchor=south] at (axis cs:Android,1.7) {$+1.2$};
+\node[font=\footnotesize, anchor=north] at (axis cs:Android,-2.5) {$-1.4$};
+\node[font=\footnotesize, anchor=south] at (axis cs:OSWorld,0.8) {$+0.2$};
+\node[font=\footnotesize, anchor=north] at (axis cs:OSWorld,-3.1) {$-2.4$};
+\node[font=\footnotesize, anchor=south] at (axis cs:WebArena,-1.0) {$-4.0$};
+\node[font=\footnotesize, anchor=north] at (axis cs:WebArena,-7.6) {$-5.75$};
+\node[font=\scriptsize, gray!50!black] at (axis cs:Android,2.5) {diff $=$ 2.6};
+\node[font=\scriptsize, gray!50!black] at (axis cs:OSWorld,2.5) {diff $=$ 2.6};
+\node[font=\scriptsize, gray!50!black] at (axis cs:WebArena,2.5) {diff $=$ 1.75};
+\end{axis}
 \end{tikzpicture}
-\caption{Cold-to-warm SR deltas under verify-gate ON vs OFF, on AndroidWorld official-15 ($n{=}5$ seeds), OSWorld test\_tiny ($n{=}5$ reps), and WebArena shopping\_admin 12-task subset ($n{=}4{+}4$ symmetric). \textbf{The diff-of-deltas is 2.6 tasks on Android, 2.6 tasks on OSWorld, and 1.75 tasks on WebArena}, despite different LLM backends (Gemini 3 Flash on Android, Claude Sonnet 4.6 on OSWorld and WebArena) and different task subsets. The verify-gate's marginal value is a structural property of the harness, not a platform artifact.}
+\caption{\textbf{Cross-platform verify-gate ablation.} Mean cold$\to$warm success-rate delta with the gate ON (blue) vs OFF (red), with $\pm 1$ standard-deviation error bars. On all three structurally different platforms---mobile (AndroidWorld official-15, $n{=}5$ Gemini 3 Flash seeds), desktop (OSWorld test\_tiny, $n{=}5$ Claude Sonnet 4.6 reps), and web (WebArena shopping\_admin 12-task subset, $n{=}4{+}4$ Claude reps)---the gate's marginal value (diff-of-deltas) lies in a narrow $1.75$--$2.6$ task band. The cross-platform meta-test on the 14 paired observations, all favoring the gate or tied, yields $p \approx 1.2 \times 10^{-4}$ under the no-effect null. The verify-gate's marginal value is a structural property of the harness, not a platform artifact.}
 \label{fig:diff-of-deltas}
 \end{figure}
 
@@ -447,65 +399,15 @@ These five cases (and the dense WebArena set) are exactly the lossy-compile patt
 \subsection{What is \emph{Not} Load-Bearing}
 \label{sec:eval-not-loadbearing}
 
-Equally informative are the AB experiments that show negative results. We document two: (a) prompt-level Pre-Act content is dead code in production, and (b) code-level runtime guardrails are statistically aggregate-neutral at $n{=}5$. A third (c), the dynamic step-budget cap, saves wall time without sacrificing SR.
+Equally informative are the AB experiments that produce \emph{negative} (or marginal) results, summarized here. Detailed per-seed tables are in Appendix~G.
 
-\subsubsection{Prompt-Level Pre-Act Content: Dead Code}
+\textbf{Prompt-level Pre-Act content is dead code.} The codebase ships three Pre-Act-specific guideline bullets (\texttt{prompts.py:148--158}), but the production CUA path (\texttt{agent.py:464}) invokes \texttt{T3ACUA.run(goal, env, max\_steps=...)} \emph{without} the optional \texttt{additional\_guidelines} parameter. The 73.3\% Android SR is achieved with the verbatim upstream T3A prompt and zero Pre-Act prompt-level additions. The contribution on Android is the harness wrapping T3A---not the prompt.
 
-The PreAct codebase contains a Pre-Act-specific prompt block (\texttt{prompts.py:148--158}) with three guideline bullets (replace-field semantics, scroll-exhaustion, image-content infeasibility caps). Tracing the production CUA path: \texttt{agent.py:464} invokes \texttt{T3ACUA.run(goal, env, max\_steps=...)} \emph{without} the optional \texttt{additional\_guidelines} parameter. The Pre-Act-specific bullets are never injected into the prompt.
+\textbf{Code-level runtime guardrails are aggregate-neutral at $n{=}5$.} A 2$\times$2 ablation of \texttt{PREACT\_GUARDRAILS=on/off} (gating double-tap-before-input\_text, image-task no-op cap, scroll-exhaustion notes) gives \emph{identical} cold means ($10.2 = 10.2$) and a warm $\Delta$ of $+0.4 \pm 1.14$ tasks---well within the standard deviations on each side. Per-task analysis shows the double-tap helps \texttt{AudioRecorderRecordAudioWithFileName} (populated filename dialog) but the gain is canceled by minor timing penalties on Camera tasks.
 
-The 73.3\% Android SR is therefore achieved with the verbatim upstream T3A prompt and \emph{zero} Pre-Act prompt-level additions. We treat this as a negative finding: prompt-level Pre-Act content is not contributing to the SOTA-parity claim. The contribution of Pre-Act, on Android, is the harness wrapping T3A---not any prompt modification.
+\textbf{State-machine vs.\ flat-script runtime: small but consistent advantage.} A \texttt{PREACT\_RUNTIME\_MODE=state\_machine|flat\_script} ablation (\S\ref{sec:eval-not-loadbearing-arch}) gives flat-script $10.6 \pm 1.14$ ($n{=}5$ seeds) vs.\ state-machine $11.67 \pm 0.58$ on the 3 matched seeds; matched-seed $\Delta = +0.67$ tasks favoring state-machine, all 3 paired comparisons consistent (sign-test $p = 0.125$, suggestive). The wins concentrate on Camera tasks where verification catches mismatches linear execution misses. The architectural commitment matters but is a smaller effect than the verify-gate's 1.75--2.6-task diff-of-deltas.\label{sec:eval-not-loadbearing-arch}
 
-\subsubsection{Code-Level Runtime Guardrails: Aggregate-Neutral at $n{=}5$}
-
-We wired an environment variable \texttt{PREACT\_GUARDRAILS=on/off} that gates three runtime guardrails: (a) double-tap-before-input\_text on populated text fields (replacement semantics), (b) image-task no-op cap (force \emph{infeasible} after 4 consecutive no-op actions on image-keyword tasks), and (c) scroll-direction exhaustion notes appended to step summaries. Table~\ref{tab:guardrails} reports the $n{=}5$ ablation.
-
-\begin{table}[t]
-\centering
-\caption{Code-level guardrails ablation, AndroidWorld official-15, $n{=}5$. Cold means are \emph{identical} ($10.2 = 10.2$). Warm $\Delta$ = $+0.4$ is well within the standard deviations on each side.}
-\label{tab:guardrails}
-\begin{tabular}{@{}lcccccc@{}}
-\toprule
-Seed & Cold ON & Warm ON & $\Delta$ ON & Cold OFF & Warm OFF & $\Delta$ OFF \\
-\midrule
-42 & 10 & 11 & +1 & 10 & 12 & +2 \\
-100 & 11 & 11 & 0 & 11 & 10 & $-1$ \\
-1337 & 9 & 11 & +2 & 10 & 10 & 0 \\
-2024 & 12 & 11 & $-1$ & 10 & 10 & 0 \\
-7777 & 9 & 11 & +2 & 10 & 11 & +1 \\
-\midrule
-\textbf{Mean} & \textbf{10.2} & \textbf{11.0} & \textbf{$+0.8 \pm 1.30$} & \textbf{10.2} & \textbf{10.6} & \textbf{$+0.4 \pm 1.14$} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Per-task analysis (omitted for space; see findings summary in supplementary materials) reveals task-specific effects that cancel out at the aggregate level. The double-tap guardrail materially helps \texttt{AudioRecorderRecordAudioWithFileName}---the task involves a populated filename dialog where vanilla \texttt{input\_text} appends rather than replaces---but is counterbalanced by minor timing penalties on Camera tasks. The Pre-Act SR claim does \emph{not} depend on these runtime guardrails. We retain them in the production code as edge-case protections, but we do not claim them as contributions in this paper.
-
-\subsubsection{State-Machine vs.\ Flat-Script Runtime}
-\label{sec:eval-not-loadbearing-arch}
-
-To partially test the architectural commitment that ``the SM is the runtime'' (\S\ref{sec:related}), we wired an environment variable \texttt{PREACT\_RUNTIME\_MODE=state\_machine|flat\_script} that gates per-state verification in the replayer. State-machine mode (default) verifies each state's predicate before executing the outgoing transition and falls back to CUA if verification fails. Flat-script mode bypasses verification and executes transitions linearly, mimicking ActionEngine-style flat-Python generation followed by linear execution---both modes share the same compile pipeline and the same stored corpus content; only runtime semantics differ. Table~\ref{tab:arch-ab} reports flat-script at $n{=}5$ Android seeds (warm runs from a fresh per-seed rag\_db), with state-machine $n{=}3$ matched comparison on the original three seeds.
-
-\begin{table}[t]
-\centering
-\caption{Architectural ablation: state-machine vs.\ flat-script runtime, AndroidWorld official-15 warm SR. State-machine n=3 (matched seeds), flat-script n=5 (matched seeds + 7 + 2025). Per-seed rag\_db reset for cold→warm.}
-\label{tab:arch-ab}
-\begin{tabular}{@{}lcccccc@{}}
-\toprule
-Mode & seed=42 & seed=100 & seed=1337 & seed=7 & seed=2025 & Mean $\pm$ std \\
-\midrule
-state\_machine (default) & 12/15 & 12/15 & 11/15 & --- & --- & \textbf{11.67 $\pm$ 0.58} ($n{=}3$) \\
-flat\_script (ActionEngine-style) & 11/15 & 12/15 & 10/15 & 11/15 & 9/15 & \textbf{10.6 $\pm$ 1.14} ($n{=}5$) \\
-\midrule
-$\Delta$ (matched) & +1 & 0 & +1 & --- & --- & \textbf{+0.67 tasks (matched $n{=}3$)} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-On the 3 matched seeds, state-machine mode wins by $+0.67$ tasks; all 3 paired comparisons show state-machine $\geq$ flat-script (sign-test $p = 0.125$ at $n{=}3$, suggestive but not significant). The wins concentrate on Camera tasks where verification catches mismatches that linear execution misses: e.g., on seed=42 state-machine ran CameraTakePhoto via RPA at cov$=$100\% while flat-script entered an unverified replay that errored, fell through to CUA, and failed in 3 actions. The flat-script $n{=}5$ extension confirms variance: per-seed warm SR ranges 9--12 with mean 10.6 ± 1.14. \emph{The architectural commitment matters but is a smaller effect than the verify-gate's 2.6-task diff-of-deltas} (Table~\ref{tab:gate-android}), consistent with the paper's framing that the gate is the central empirical contribution.
-
-\subsubsection{Step-Budget Cap: Wall-Time-Only}
-
-The dynamic step-budget cap \texttt{min(max(20, 8c), 30)} (where $c$ is task complexity) was hypothesized to bound wall time without sacrificing SR. We test against an unbounded 60-step fixed budget at $n{=}5$ seeds. The cap-A (current default) mean is $9.8 \pm 0.84$; cap-B (60-step) mean is $11.6 \pm 0.55$ (cold runs only). The diff is $+1.8 \pm 0.84$, within the validation-plan $\pm 2$ prediction interval. The wall-time ratio (cap-A : cap-B) is 0.69, within the plan's 0.7 prediction. The +1.8 SR is paid for by +30\% wall time on the FAIL tail---primarily SystemBrightnessMax, which consumes the full 60-step budget under cap-B and still fails (the failure is harness-deterministic; more budget does not help).
+\textbf{Dynamic step-budget cap: wall-time-only.} The cap \texttt{min(max(20, 8c), 30)} vs.\ unbounded 60-step at $n{=}5$ gives $9.8 \pm 0.84$ (cap-A) vs.\ $11.6 \pm 0.55$ (cap-B); $\Delta = +1.8 \pm 0.84$ tasks (within $\pm 2$ prediction interval) at the cost of +30\% wall time on the FAIL tail (primarily SystemBrightnessMax, harness-deterministic). The current cap saves wall time at modest SR cost.
 
 \subsection{Summary: 8 of 9 Validity Threats Closed}
 
@@ -556,27 +458,7 @@ Instead, the diff-of-deltas magnitude is structural: it is the rate at which the
 
 \subsection{Smoking-Gun Reproducibility}
 
-The five smoking-gun cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps. Table~\ref{tab:smoking-gun-rep} reports the per-program reproducibility across the 5 OSWorld warm-OFF reps.
-
-\begin{table}[t]
-\centering
-\caption{Smoking-gun reproducibility across 5 OSWorld warm-OFF reps. Each row: how many of 5 reps replayed the program at cov$=$100\% and got score$=$0.}
-\label{tab:smoking-gun-rep}
-\small
-\begin{tabular}{@{}llc@{}}
-\toprule
-Program ID & Task & Reps with cov$=$100\%/score$=$0 \\
-\midrule
-43188217 & LibreOffice Calc formula & 5/5 (fully deterministic) \\
-c1f04f87 & LibreOffice Calc chart & 4/5 (rep2 hybrid-rescued) \\
-8f0fdfa4 & Chrome history clean & 2/5 (rep3/4/5 replayed correctly) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The mechanism is partially deterministic. For the most reliable case (Calc formula 43188217), the lossy program reproducibly fails at cov$=$100\% on every warm rep. For Calc chart c1f04f87, hybrid-mode rescue occasionally salvaged the run via CUA fallback after partial replay (cov$=$8\%). For Chrome history 8f0fdfa4, the cold-stored program's mechanical action sequence happened to match the evaluator's required browser state on 3 of 5 reps---a partial-determinism that traces to environmental factors (Chrome's session state, browsing history initialization) varying across DesktopEnv resets even with identical task IDs.
-
-\textbf{Crucially, the aggregate regression remains fully deterministic.} All 5 OFF reps lose at least 2 tasks; no rep escapes the regression. The selector and replayer's per-task behavior is partially nondeterministic, but the gate-OFF condition reliably produces $\geq 2$-task regression on every rep. This is the property paper claims should rest on, not the per-task smoking guns.
+The five smoking-gun cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps---the OSWorld Calc-formula program reproduces 5/5 reps, the Calc-chart 4/5, and the Chrome-history 2/5 (per-program breakdown in Appendix~H). \textbf{Crucially, the aggregate regression remains fully deterministic.} All 5 OFF reps lose at least 2 tasks; no rep escapes the regression. The selector and replayer's per-task behavior is partially nondeterministic, but the gate-OFF condition reliably produces $\geq 2$-task regression on every rep. This is the property paper claims should rest on, not the per-task smoking guns.
 
 \subsection{Harness-Deterministic vs.\ LLM-Driven Failures}
 
@@ -585,27 +467,21 @@ Three AndroidWorld tasks (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) an
 \subsection{Out-of-Distribution Generalization}
 \label{sec:eval-ood}
 
-To test whether the corpus transfers beyond seen tasks, we built a rag\_db from the OSWorld test\_tiny set (6 tasks across Chrome, LibreOffice Calc, LibreOffice Writer; 4 verify-gate-stored programs after compile filtering) and ran on \texttt{test\_small\_ood.json}: the 33 OSWorld test\_small tasks that are \emph{not} in test\_tiny, spanning 9 domains (chrome$\times$2, gimp$\times$2, libreoffice\_calc$\times$1, libreoffice\_impress$\times$2, multi\_apps$\times$17, os$\times$2, thunderbird$\times$2, vlc$\times$2, vs\_code$\times$3). The agentic Program Selector retrieves from the test\_tiny corpus when the new task's description plausibly matches.
-
-Result: \textbf{warm-OOD 21/30 = 70.0\%} (3 tasks errored during environment setup, not counted). The matched cold baseline on the same 30 OOD tasks (taken from a prior cold run on test\_small with the same setup-error tasks excluded) is approximately $20/30 = 66.7\%$.
-
-The cross-platform interpretation: \textbf{the test\_tiny corpus is approximately neutral on OOD tasks}---warm OOD ($\approx 70\%$) and cold OOD ($\approx 67\%$) differ by 1 task, well within run-to-run noise. Specifically, the corpus does not meaningfully \emph{help} by transferring abstractions across task families (multi\_apps, vlc, vs\_code, thunderbird, os, gimp), and it does not meaningfully \emph{hurt} by retrieving inapplicable programs and wasting replay budget. The selector tends to return ``no candidate'' when the OOD task's description does not match a stored program (cov$=$0\% on warm OOD runs is consistent with this). This result clarifies the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is in repeated invocations of seen tasks, not in cross-task generalization}.
+We tested whether the corpus transfers beyond seen tasks by running a test\_tiny-built rag\_db on the 33 non-test\_tiny tasks of OSWorld test\_small. The result is \textbf{approximately neutral}: warm-OOD 21/30 = 70\% vs cold-OOD $\approx 20/30 = 67\%$ (1-task difference, within run-to-run noise). The corpus neither meaningfully helps by transferring abstractions across task families nor meaningfully hurts by retrieving inapplicable programs---the selector tends to return ``no candidate'' when the OOD task's description does not match a stored program. This clarifies the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is in repeated invocations of seen tasks, not cross-task generalization} (full breakdown in Appendix~E).
 
 \subsection{Limitations}
 
 The closure table (Table~\ref{tab:gap-closure}) lists eight closed threats and one out-of-scope. Beyond those, we explicitly acknowledge five remaining limitations:
 
-\textbf{(L1) Architectural baseline (partial).} We ran an ActionEngine-style flat-script baseline at $n{=}5$ Android seeds (\S\ref{sec:eval-not-loadbearing-arch}) by gating per-state verification under a \texttt{PREACT\_RUNTIME\_MODE=flat\_script} env var. Flat-script mean (warm) is $10.6 \pm 1.14$ across seeds 42/100/1337/7/2025, vs.\ state-machine $11.67 \pm 0.58$ on the matched 3 seeds; the matched-seed $\Delta = +0.67$ tasks in favor of state-machine, sign-test $p = 0.125$ on $n{=}3$ paired comparisons (suggestive but not significant). The architectural commitment matters but is a smaller effect than the verify-gate's 2.6-task diff-of-deltas, consistent with the paper's framing that the gate is the bigger empirical contribution. We did not run an untargeted-exploration baseline.
-
-\textbf{(L2) Benchmark coverage.} OSWorld test\_tiny has only 6 tasks, AndroidWorld official-15 has 15, WebArena shopping\_admin subset has 12. While the verify-gate effect replicates cross-platform, the benchmarks themselves are a small sample of computer-using tasks. We acknowledge platform-coverage bias (\#8 in Table~\ref{tab:gap-closure}) as out-of-scope for this paper. The relative percentage-point magnitudes are influenced by the denominator: 43\,pp on OSWorld's 6-task subset is mathematically larger than 17\,pp on Android's 15-task subset and 15\,pp on WebArena's 12-task subset, for absolute task counts that fall in a similar range (1.75--2.6 tasks).
-
-\textbf{(L3) Compile cost.} The verify-before-store gate requires a full re-replay and re-evaluation of every compiled program. From timing measurements across our experiments (60 OSWorld tasks; 60 Android tasks under gate-ON), the verify-replay phase adds median 141\,s on OSWorld and 76\,s on Android per stored task, on top of the original CUA execution (median 65\,s OSWorld; 47\,s Android). This corresponds to \textbf{+70\% wall overhead on OSWorld and +134\% on Android per successful CUA-then-compile cycle} (the relative figure is higher on Android because Android CUA is faster, so the fixed-cost verify-replay dominates more proportionally). The cost is amortized on warm runs where the corpus retrieves already-verified programs in seconds, but the compile-time overhead is real and may matter for high-throughput deployments. The double-gate cost is the price of monotonicity: \S\ref{sec:eval-gate}'s diff-of-deltas of 2.6 tasks on each platform is paid for in this verify-replay budget.
-
-\textbf{(L4) Compile-fidelity rate.} A separate audit of stored programs across platforms (Android: 58 programs; OSWorld: 16; WebArena: 7) found two recurring compile-fidelity risk patterns: missing \texttt{navigate\_back} on nav-heavy edit/delete tasks (affecting roughly 28\% of Android programs), and dynamic \texttt{inspect\_text}/\texttt{inspect\_screenshot} returns on pages whose state evolves between Run~1 and replay (100\% of audited WebArena programs use \texttt{inspect\_screenshot}, which fully explains the 48/48 smoking-gun rate observed under gate-OFF). The compiler itself is an LLM that produces lossy state-machines on a non-trivial fraction of inputs. The verify-gate filters this at storage time, but as the corpus scales, the gate's verify-replay cost (proportional to compile attempts, not just stored programs) may become a bottleneck.
-
-\textbf{(L5) LLM nondeterminism in selector.} The agentic Program Selector is itself an LLM call. We measured selector exact-id-match accuracy at 22/30 = 73\% on the rag\_db's stored programs, prompted with each program's own task description verbatim. Inspecting the 8 misses, all were picks of \emph{semantically equivalent} programs (same \texttt{task\_description}, different \texttt{program\_id} from accumulated reps under different dedup signatures). Functional accuracy (correct task family selected) is therefore close to 100\%, with the 73\% exact-id figure reflecting the corpus's accumulation of multiple matches per task.
-
-To stress-test the selector beyond verbatim retrieval, we ran a paraphrase-robustness audit: for each of 15 stored Android programs, we generated 3 LLM-rewritten paraphrases (45 paraphrased queries total) and measured whether the selector still picked the original program. Result: 21/45 = 47\% exact-id, 13/45 = 29\% same-task-different-id (paraphrase picked an equivalent program), 11/45 = 24\% no-pick (selector returned ``no candidate''), and \textbf{0/45 = 0\% wrong-task-family} (selector never picked an unrelated program). \emph{Functional accuracy} (exact + equivalent) is 76\%; the no-pick fraction is conservative behavior (the selector errs toward CUA fallback rather than retrieving an inapplicable program). Selector nondeterminism on novel-task discrimination remains future work, but the 0\% wrong-pick rate is encouraging: at 76\% functional retrieval and 0\% mis-retrieval, the selector is conservative-by-design rather than over-eager.
+Beyond the eight closed validity threats we acknowledge five remaining limitations:
+\begin{itemize}[leftmargin=2em]\tightlist
+\item \textbf{(L1) Architectural baseline (partial).} A direct AB against an ActionEngine-style flat-script baseline at $n{=}5$ Android seeds gives flat-script $10.6 \pm 1.14$ vs.\ state-machine $11.67 \pm 0.58$ ($\Delta = +0.67$, $p = 0.125$): suggestive but not significant.
+\item \textbf{(L2) Benchmark coverage.} The 6-task OSWorld test\_tiny, 15-task AndroidWorld official-15, and 12-task WebArena shopping\_admin subsets are a small sample of computer-using tasks; absolute pp magnitudes are denominator-dependent (43/17/15 pp for 1.75--2.6 absolute tasks).
+\item \textbf{(L3) Compile cost.} Verify-replay adds median +70\% wall overhead on OSWorld and +134\% on Android per successful CUA-then-compile cycle; the cost is amortized on warm runs but matters for high-throughput deployments.
+\item \textbf{(L4) Compile-fidelity rate.} The LLM compiler produces lossy state-machines on a non-trivial fraction of inputs (audit: $\sim 28\%$ Android programs miss \texttt{navigate\_back}; $100\%$ of audited WebArena programs use \texttt{inspect\_screenshot} on dynamic state); the gate filters this at storage but scales as the number of compile attempts, not stored programs.
+\item \textbf{(L5) Selector nondeterminism.} Verbatim retrieval is 73\% exact-id (all 8 misses were semantically-equivalent picks); paraphrase robustness is 76\% functional (47\% exact-id + 29\% equivalent), 24\% no-pick, \textbf{0\% wrong-task-family}---the selector is conservative-by-design rather than over-eager.
+\end{itemize}
+Detailed measurements and analysis for L1--L5 in Appendix~F.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -626,7 +502,50 @@ Future work falls in three directions:
 \bibliography{references}
 
 \appendix
-\section*{Appendix A. Computer-Action Schema}
+\section*{Appendix A. Concrete Program Example}
+\label{sec:program}
+
+To make the state-machine representation concrete, we present a compiled program for the AndroidWorld \texttt{ContactsNewContactDraft} task (parameters: first name, last name, phone number, phone label).
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,language={}]
+{
+  "metadata": {
+    "task_description": "Go to the new contact screen and enter the following details",
+    "application_context": "com.google.android.contacts",
+    "parameters": ["first_name", "last_name", "phone_number", "phone_label"],
+    "dedup_signature": "contacts_new_draft_4param"
+  },
+  "states": [
+    {"id": "home", "verification": {"type": "expect_element", "xpath": "resource_id=...launcher", "timeout_ms": 3000}},
+    {"id": "contacts_main", "verification": {"type": "expect_element", "xpath": "package=com.google.android.contacts", "timeout_ms": 5000}},
+    {"id": "new_contact_form", "verification": {"type": "expect_element", "xpath": "resource_id=name_field", "timeout_ms": 3000}},
+    {"id": "form_filled", "verification": {"type": "expect_element", "xpath": "text=$first_name $last_name", "timeout_ms": 2000}},
+    {"id": "draft_saved", "verification": {"type": "terminal_state"}}
+  ],
+  "transitions": [
+    {"from": "home", "to": "contacts_main",
+     "action": {"type": "open_app", "app_name": "Contacts",
+                "description": "open the Contacts app"}},
+    {"from": "contacts_main", "to": "new_contact_form",
+     "action": {"type": "action_click", "target": "content_desc=Create new contact",
+                "description": "tap the Create new contact button"}},
+    {"from": "new_contact_form", "to": "form_filled",
+     "action": {"type": "input_text", "text": "$first_name $last_name", "index": 1,
+                "description": "type the contact's first and last name (parameters)"}},
+    /* ... three more transitions for phone number, label, save ... */
+    {"from": "form_filled", "to": "draft_saved",
+     "action": {"type": "action_click", "target": "content_desc=Save",
+                "description": "tap Save to commit the new contact draft"}}
+  ],
+  "human_interventions": []
+}
+\end{lstlisting}
+
+The verification predicate of each state is an XPath/accessibility-tree pattern that must hold on the live UI; replay halts and falls through to CUA if a predicate fails. Parameters (\$first\_name, \$phone\_number, etc.) are inferred at compile time from the live trace: any input text that matches a task-description placeholder is parameterized so the program generalizes across instances. Every transition carries a one-sentence \texttt{description} field that the selector reads when judging whether the program applies to a new task.
+
+The state graph here is tree-like, but more complex tasks (delete-confirmation dialogs, navigation that branches on app version) compile into graphs with multiple outgoing transitions per state, where the state's verification predicate selects which branch is active.
+
+\section*{Appendix B. Computer-Action Schema}
 
 Each transition's \texttt{action} field must be one of the action types in Table~\ref{tab:actions}. Action types are translated to platform-specific backends at execution time: \texttt{action\_click} on Android maps to a \texttt{JSONAction}-formatted touch with the resolved element's $(x, y)$ coordinates; on OSWorld it maps to \texttt{pyautogui.click(x, y)}. The cross-platform schema enables the same compiled state-machine program to run on either backend, although in practice each task's compile is platform-specific because the verification predicates use platform-specific selector dialects (Android XPath vs.\ pyautogui screenshot regions).
 
@@ -657,7 +576,7 @@ Action type & Description and required fields \\
 
 The \texttt{description} field on each transition (one short sentence) is consumed by the agentic Program Selector (\S\ref{sec:arch}) when judging whether a stored program applies to the current task. Selectors are written to be parameter-aware (e.g.\ ``type the filename (parameter \texttt{filename})'' rather than ``type text''), since the program's \texttt{parameters} list is what the LLM uses to bind the program's slots to the new task's instance values at retrieval time.
 
-\section*{Appendix B. Per-Task Multi-Seed Data}
+\section*{Appendix C. Per-Task Multi-Seed Data}
 
 Table~\ref{tab:gemini-3seed} reports per-task warm SR across the three Gemini 3 Flash seeds used for the cold$\to$warm monotonicity experiment (\S\ref{sec:eval-monotonic}). The stable failure set (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) is observed across all three seeds. The variance task (BrowserMaze) is the maze-pathfinding task, where the agent must navigate a grid by directional clicks and the action sequence is sensitive to LLM sampling.
 
@@ -696,7 +615,94 @@ Total & 11/15 & 12/15 & 10/15 \\
 
 The complete per-task results across all 32 Android multi-seed runs and 8 OSWorld runs are also available in the project's \texttt{paper/findings\_summary.md}.
 
-\section*{Appendix C. Container Patch}
+\section*{Appendix D. Container Patch}
 The \texttt{android\_server\_patched.py} adds a \texttt{/state} endpoint to \texttt{huggingface/android\_world:latest} that returns base64-encoded screenshots plus serialized accessibility-tree elements, sidestepping the upstream populated-AVD a11y-gRPC initialization wedge.
+
+\section*{Appendix E. Out-of-Distribution Generalization (Details)}
+\label{sec:appendix-ood}
+
+To test whether the corpus transfers beyond seen tasks, we built a rag\_db from the OSWorld test\_tiny set (6 tasks across Chrome, LibreOffice Calc, LibreOffice Writer; 4 verify-gate-stored programs after compile filtering) and ran on \texttt{test\_small\_ood.json}: the 33 OSWorld test\_small tasks that are \emph{not} in test\_tiny, spanning 9 domains (chrome$\times$2, gimp$\times$2, libreoffice\_calc$\times$1, libreoffice\_impress$\times$2, multi\_apps$\times$17, os$\times$2, thunderbird$\times$2, vlc$\times$2, vs\_code$\times$3). The agentic Program Selector retrieves from the test\_tiny corpus when the new task's description plausibly matches.
+
+Result: \textbf{warm-OOD 21/30 = 70.0\%} (3 tasks errored during environment setup, not counted). The matched cold baseline on the same 30 OOD tasks (taken from a prior cold run on test\_small with the same setup-error tasks excluded) is approximately $20/30 = 66.7\%$.
+
+The corpus does not meaningfully \emph{help} by transferring abstractions across task families (multi\_apps, vlc, vs\_code, thunderbird, os, gimp), and it does not meaningfully \emph{hurt} by retrieving inapplicable programs and wasting replay budget. The selector tends to return ``no candidate'' when the OOD task's description does not match a stored program (cov$=$0\% on warm OOD runs is consistent with this).
+
+\section*{Appendix F. Limitations (Extended)}
+\label{sec:appendix-limitations}
+
+\textbf{(L1) Architectural baseline.} We ran an ActionEngine-style flat-script baseline at $n{=}5$ Android seeds (\S\ref{sec:eval-not-loadbearing-arch}) by gating per-state verification under a \texttt{PREACT\_RUNTIME\_MODE=flat\_script} env var. Flat-script mean (warm) is $10.6 \pm 1.14$ across seeds 42/100/1337/7/2025, vs.\ state-machine $11.67 \pm 0.58$ on the matched 3 seeds; the matched-seed $\Delta = +0.67$ tasks in favor of state-machine, sign-test $p = 0.125$ on $n{=}3$ paired comparisons (suggestive but not significant). The architectural commitment matters but is a smaller effect than the verify-gate's 1.75--2.6-task diff-of-deltas, consistent with the paper's framing that the gate is the bigger empirical contribution. We did not run an untargeted-exploration baseline.
+
+\textbf{(L2) Benchmark coverage.} OSWorld test\_tiny has only 6 tasks, AndroidWorld official-15 has 15, WebArena shopping\_admin subset has 12. While the verify-gate effect replicates cross-platform, the benchmarks themselves are a small sample of computer-using tasks. We acknowledge platform-coverage bias as out-of-scope for this paper. The relative percentage-point magnitudes are influenced by the denominator: 43\,pp on OSWorld's 6-task subset is mathematically larger than 17\,pp on Android's 15-task subset and 15\,pp on WebArena's 12-task subset, for absolute task counts that fall in a similar range (1.75--2.6 tasks).
+
+\textbf{(L3) Compile cost.} The verify-before-store gate requires a full re-replay and re-evaluation of every compiled program. From timing measurements across our experiments (60 OSWorld tasks; 60 Android tasks under gate-ON), the verify-replay phase adds median 141\,s on OSWorld and 76\,s on Android per stored task, on top of the original CUA execution (median 65\,s OSWorld; 47\,s Android). This corresponds to \textbf{+70\% wall overhead on OSWorld and +134\% on Android per successful CUA-then-compile cycle} (the relative figure is higher on Android because Android CUA is faster, so the fixed-cost verify-replay dominates more proportionally). The cost is amortized on warm runs where the corpus retrieves already-verified programs in seconds, but the compile-time overhead is real and may matter for high-throughput deployments.
+
+\textbf{(L4) Compile-fidelity rate.} A separate audit of stored programs across platforms (Android: 58 programs; OSWorld: 16; WebArena: 7) found two recurring compile-fidelity risk patterns: missing \texttt{navigate\_back} on nav-heavy edit/delete tasks (affecting roughly 28\% of Android programs), and dynamic \texttt{inspect\_text}/\texttt{inspect\_screenshot} returns on pages whose state evolves between Run~1 and replay (100\% of audited WebArena programs use \texttt{inspect\_screenshot}, fully explaining the 48/48 smoking-gun rate observed under gate-OFF). The compiler itself is an LLM that produces lossy state-machines on a non-trivial fraction of inputs. The verify-gate filters this at storage time, but as the corpus scales, the gate's verify-replay cost (proportional to compile attempts, not just stored programs) may become a bottleneck.
+
+\textbf{(L5) LLM nondeterminism in selector.} The agentic Program Selector is itself an LLM call. We measured selector exact-id-match accuracy at 22/30 = 73\% on the rag\_db's stored programs, prompted with each program's own task description verbatim. Inspecting the 8 misses, all were picks of \emph{semantically equivalent} programs (same \texttt{task\_description}, different \texttt{program\_id} from accumulated reps under different dedup signatures). Functional accuracy (correct task family selected) is therefore close to 100\%, with the 73\% exact-id figure reflecting the corpus's accumulation of multiple matches per task.
+
+To stress-test the selector beyond verbatim retrieval, we ran a paraphrase-robustness audit: for each of 15 stored Android programs, we generated 3 LLM-rewritten paraphrases (45 paraphrased queries total) and measured whether the selector still picked the original program. Result: 21/45 = 47\% exact-id, 13/45 = 29\% same-task-different-id (paraphrase picked an equivalent program), 11/45 = 24\% no-pick (selector returned ``no candidate''), and \textbf{0/45 = 0\% wrong-task-family} (selector never picked an unrelated program). \emph{Functional accuracy} (exact + equivalent) is 76\%; the no-pick fraction is conservative behavior (the selector errs toward CUA fallback rather than retrieving an inapplicable program). At 76\% functional retrieval and 0\% mis-retrieval, the selector is conservative-by-design rather than over-eager.
+
+\section*{Appendix G. Negative-Findings Tables}
+\label{sec:appendix-negative-tables}
+
+This appendix provides the per-seed tables for the negative findings summarized in \S\ref{sec:eval-not-loadbearing}.
+
+\begin{table}[h]
+\centering
+\caption{Code-level guardrails ablation, AndroidWorld official-15, $n{=}5$. Cold means are \emph{identical} ($10.2 = 10.2$). Warm $\Delta$ = $+0.4$ is well within the standard deviations on each side.}
+\label{tab:guardrails}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Seed & Cold ON & Warm ON & $\Delta$ ON & Cold OFF & Warm OFF & $\Delta$ OFF \\
+\midrule
+42 & 10 & 11 & +1 & 10 & 12 & +2 \\
+100 & 11 & 11 & 0 & 11 & 10 & $-1$ \\
+1337 & 9 & 11 & +2 & 10 & 10 & 0 \\
+2024 & 12 & 11 & $-1$ & 10 & 10 & 0 \\
+7777 & 9 & 11 & +2 & 10 & 11 & +1 \\
+\midrule
+\textbf{Mean} & \textbf{10.2} & \textbf{11.0} & \textbf{$+0.8 \pm 1.30$} & \textbf{10.2} & \textbf{10.6} & \textbf{$+0.4 \pm 1.14$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Architectural ablation: state-machine vs.\ flat-script runtime, AndroidWorld official-15 warm SR. State-machine $n{=}3$ (matched seeds), flat-script $n{=}5$ (matched seeds + 7 + 2025).}
+\label{tab:arch-ab}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Mode & seed=42 & seed=100 & seed=1337 & seed=7 & seed=2025 & Mean $\pm$ std \\
+\midrule
+state\_machine (default) & 12/15 & 12/15 & 11/15 & --- & --- & \textbf{11.67 $\pm$ 0.58} ($n{=}3$) \\
+flat\_script (ActionEngine-style) & 11/15 & 12/15 & 10/15 & 11/15 & 9/15 & \textbf{10.6 $\pm$ 1.14} ($n{=}5$) \\
+\midrule
+$\Delta$ (matched) & +1 & 0 & +1 & --- & --- & \textbf{+0.67 tasks (matched $n{=}3$)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{Appendix H. Smoking-Gun Reproducibility (Per-Program)}
+\label{sec:appendix-smoking-gun-rep}
+
+The five smoking-gun cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps. Table~\ref{tab:smoking-gun-rep} reports the per-program reproducibility across the 5 OSWorld warm-OFF reps.
+
+\begin{table}[h]
+\centering
+\caption{Smoking-gun reproducibility across 5 OSWorld warm-OFF reps. Each row: how many of 5 reps replayed the program at cov$=$100\% and got score$=$0.}
+\label{tab:smoking-gun-rep}
+\small
+\begin{tabular}{@{}llc@{}}
+\toprule
+Program ID & Task & Reps with cov$=$100\%/score$=$0 \\
+\midrule
+43188217 & LibreOffice Calc formula & 5/5 (fully deterministic) \\
+c1f04f87 & LibreOffice Calc chart & 4/5 (rep2 hybrid-rescued) \\
+8f0fdfa4 & Chrome history clean & 2/5 (rep3/4/5 replayed correctly) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The mechanism is partially deterministic. For the most reliable case (Calc formula 43188217), the lossy program reproducibly fails at cov$=$100\% on every warm rep. For Calc chart c1f04f87, hybrid-mode rescue occasionally salvaged the run via CUA fallback after partial replay (cov$=$8\%). For Chrome history 8f0fdfa4, the cold-stored program's mechanical action sequence happened to match the evaluator's required browser state on 3 of 5 reps---a partial-determinism that traces to environmental factors (Chrome's session state, browsing history initialization) varying across DesktopEnv resets even with identical task IDs.
 
 \end{document}
