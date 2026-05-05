@@ -88,9 +88,16 @@ class PreActAndroidAgent:
         # T3A for apples-to-apples SOTA baseline parity.
         self.use_official_t3a = use_official_t3a
         # Agentic selector — reads program descriptions and picks one via
-        # tool-calling. Replaces the prior keyword/embedding RAG.
-        from preact.rag.selector import ProgramSelector
-        self.selector = ProgramSelector(llm, store) if store else None
+        # tool-calling. PREACT_SELECTOR_MODE=embedding swaps to a
+        # sentence-transformer cosine baseline for ablation.
+        import os as _os_sel
+        _sel_mode = _os_sel.environ.get("PREACT_SELECTOR_MODE", "agentic").lower()
+        if _sel_mode == "embedding":
+            from preact.rag.embedding_selector import EmbeddingSelector
+            self.selector = EmbeddingSelector(llm, store) if store else None
+        else:
+            from preact.rag.selector import ProgramSelector
+            self.selector = ProgramSelector(llm, store) if store else None
 
     async def execute_task(
         self,
@@ -850,8 +857,18 @@ class PreActAndroidAgent:
         trace_text = format_trace_for_compilation(step_data)
         user_prompt = USER_PROMPT_COMPILE.format(trace_text=trace_text)
 
+        # PREACT_COMPILE_PROVIDER=gemini swaps the compile-step LLM
+        # for the cross-provider robustness ablation (default: shared
+        # Anthropic LLMClient).
+        import os as _os_cmp
+        compile_llm = self.llm
+        if _os_cmp.environ.get("PREACT_COMPILE_PROVIDER", "").lower() == "gemini":
+            if not hasattr(self, "_gemini_compile_llm"):
+                from preact.llm.gemini_client import GeminiCompileClient
+                self._gemini_compile_llm = GeminiCompileClient()
+            compile_llm = self._gemini_compile_llm
         try:
-            response = await self.llm.complete(
+            response = await compile_llm.complete(
                 messages=[{"role": "user", "content": user_prompt}],
                 system=SYSTEM_PROMPT_COMPILE,
             )

@@ -71,7 +71,15 @@ class PreActAgent:
 
         # Initialize components
         self.recorder = InteractionRecorder(env, self.config.recorder)
-        self.generator = ModelGenerator(llm)
+        # PREACT_COMPILE_PROVIDER=gemini swaps the compile-step LLM to
+        # Gemini for the cross-provider compile-robustness ablation.
+        # Default uses the shared (Anthropic) LLMClient.
+        import os as _os_compile
+        if _os_compile.environ.get("PREACT_COMPILE_PROVIDER", "").lower() == "gemini":
+            from preact.llm.gemini_client import GeminiCompileClient
+            self.generator = ModelGenerator(GeminiCompileClient())
+        else:
+            self.generator = ModelGenerator(llm)
         self.store = ProgramStore(llm, self.config.rag)
         self.executor = RPAExecutor(env, llm)
         self.cua = CUALoop(env, llm, self.recorder, self.config.cua)

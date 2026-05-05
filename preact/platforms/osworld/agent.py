@@ -87,9 +87,16 @@ class PreActOSAgent:
         # "legacy_a11y" = numbered a11y-tree + semantic action parser
         self.cua_backend = cua_backend
         # Agentic selector — reads program descriptions and picks one via
-        # tool-calling. Replaces the prior keyword/embedding RAG.
-        from preact.rag.selector import ProgramSelector
-        self.selector = ProgramSelector(llm, store) if store else None
+        # tool-calling. PREACT_SELECTOR_MODE=embedding swaps to a
+        # sentence-transformer cosine baseline for ablation.
+        import os as _os_sel
+        _sel_mode = _os_sel.environ.get("PREACT_SELECTOR_MODE", "agentic").lower()
+        if _sel_mode == "embedding":
+            from preact.rag.embedding_selector import EmbeddingSelector
+            self.selector = EmbeddingSelector(llm, store) if store else None
+        else:
+            from preact.rag.selector import ProgramSelector
+            self.selector = ProgramSelector(llm, store) if store else None
 
     async def execute_task(
         self,
