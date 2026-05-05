@@ -192,7 +192,7 @@ The opposite failure mode---\texttt{replay\_ok=True} with \texttt{verify\_score=
 
 \subsection{The Agentic Program Selector}
 
-The Program Selector is itself an LLM-driven component. We deliberately avoided embedding-based RAG: program descriptions are short, parameter schemas are structured, and the discrimination problem (does this stored program apply to the current task?) is a reasoning task, not a similarity task. The selector receives the goal, the available programs (titles + descriptions + parameter schemas), and chooses via a tool call. Implementation details in Appendix~B; a worked program example in Appendix~A.
+The Program Selector is itself an LLM-driven component that receives the goal, the available programs (titles + descriptions + parameter schemas), and chooses via a tool call. Implementation details in Appendix~B; a worked program example in Appendix~A. We initially adopted this design on the principle that the discrimination problem (does this stored program apply to the current task?) is a reasoning task. Our ablation against a sentence-transformer embedding-RAG baseline (\S\ref{sec:eval-selector-ablation}) shows the two are empirically comparable on in-distribution paraphrase retrieval at 0\% wrong-task picks; the agentic selector's principal advantage is interpretability (it logs explicit reasoning) and gracefully refusing-to-pick on adversarial out-of-distribution queries.
 
 \subsection{The CUA Fallback}
 
@@ -395,6 +395,58 @@ OSWorld & LibreOffice Calc chart & c1f04f87 & Replay completes; chart properties
 \end{table}
 
 These five cases (and the dense WebArena set) are exactly the lossy-compile pattern the verify-gate exists to filter: \emph{the program ``runs'' but does not accomplish the goal.} Without the gate, they enter the corpus and produce 14\%--50\% warm-SR regression on Android/OSWorld and a complete 0/12 wipeout on WebArena. With the gate, they are rejected at compile time; the corpus contains only programs that have independently re-passed an evaluation cycle.
+
+\subsection{Selector Backend Ablation: Embedding-RAG vs.\ Agentic LLM}
+\label{sec:eval-selector-ablation}
+
+To test the design choice of an LLM-driven Program Selector against an embedding-based RAG baseline, we wired \texttt{PREACT\_SELECTOR\_MODE=embedding} that swaps the agentic selector for top-1 cosine retrieval over the same 56-Android-program corpus, using \texttt{sentence-transformers/all-MiniLM-L6-v2} (384-dim embeddings, mean-pooled). We evaluate on (a) 45 paraphrased queries (3 LLM rewrites of each of 15 stored programs, same protocol as Tier-3 \#4) and (b) 15 unrelated out-of-domain queries (cooking, finance, math) that should produce no-pick. The embedding selector is threshold-gated: below threshold $\tau$ it returns \texttt{None}.
+
+\begin{table}[t]
+\centering
+\caption{Selector backend ablation. Functional accuracy (\%) on 45 paraphrased Android queries (in-distribution); false-pick rate (\%) on 15 unrelated queries (should-be-no-pick). Bold rows are the comparable operating points.}
+\label{tab:selector-ablation}
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Selector & Functional accuracy & Wrong-task rate (paraphrase) & False-pick rate (unrelated) \\
+\midrule
+Embedding ($\tau=0.50$) & 100\% (45/45) & 0\% & 6.7\% (1/15) \\
+\textbf{Embedding ($\tau=0.70$)} & \textbf{86.7\% (39/45)} & \textbf{0\%} & \textbf{0\% (0/15)} \\
+Embedding ($\tau=0.85$) & 53.3\% (24/45) & 0\% & 0\% \\
+\textbf{Agentic LLM (default)} & \textbf{75.6\% (34/45)} & \textbf{0\%} & 0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two findings emerge from Table~\ref{tab:selector-ablation}. \textbf{First, embedding-RAG is empirically competitive on in-distribution paraphrase retrieval}: at $\tau=0.70$ it slightly outperforms the agentic selector on functional accuracy (86.7\% vs 75.6\%) at the same 0\% wrong-task rate, while remaining safe on out-of-domain queries (0\% false-picks). This partly contradicts our prior intuition that embedding-RAG would be inferior. \textbf{Second, the false-pick curve is steep}: at $\tau=0.50$ embedding-RAG retrieves perfectly on paraphrases but starts mis-routing 6.7\% of unrelated queries. The agentic selector trades retrieval recall for explicit reasoning---it never picks at $\tau=0.0$ behavior because its reasoning step rules out semantically-close-but-wrong matches. We retain the agentic selector as default for the interpretability of its reasoning logs and for its no-tuning-required default behavior, but we acknowledge the embedding baseline is empirically competitive on this benchmark.
+
+\subsection{Head-to-Head: Direct Baselines on WebArena}
+\label{sec:eval-baselines}
+
+To address the recurring question of whether PreAct's harness actually beats simpler memory schemes, we ran two direct baselines on the WebArena 12-task shopping\_admin subset: \textbf{Muscle-Mem}~\cite{musclemem}, which records the linear action sequence and replays it blindly with full-CUA fallback on any failure, and \textbf{Workflow-Use}~\cite{workflowuse}, which stores per-task workflows and replays them with no verification. Same harness, same tasks, same backend (Claude Sonnet 4.6).
+
+\begin{table}[t]
+\centering
+\caption{Head-to-head baselines on WebArena shopping\_admin 12-task subset, $n{=}1$ (cold + warm).}
+\label{tab:baselines}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+System & Cold SR & Warm SR & $\Delta$ & Smoking-gun replays \\
+\midrule
+Muscle-Mem (blind linear cache) & 7/12 (58\%) & 5/12 (42\%) & $-2$ & 7/12 cov$=$50\% \\
+Workflow-Use (per-task scripts) & 7/12 (58\%) & 0/12 (0\%) & $-7$ & 12/12 cov$=$0\% \\
+PreAct gate-OFF (mean of 4 reps) & 5.75/12 & 0/12 & $-5.75$ & 48/48 cov$=$100\%/score$=$0 \\
+\textbf{PreAct gate-ON (mean of 4 reps)} & 6.0/12 & 2.0/12 & $-4.0$ & 5--6/16 compile-time rejections \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The honest reading of Table~\ref{tab:baselines}: \textbf{Muscle-Mem outperforms PreAct gate-ON on warm SR} for this WebArena subset ($-2$ vs.\ $-4$), and matches PreAct gate-ON on cold. Workflow-Use behaves like PreAct gate-OFF (0/12 warm). Why does the simpler approach win on this benchmark?
+
+WebArena's two-run protocol replays the \emph{same task} on Run~2, so a verbatim-action-sequence cache benefits when page state hasn't drifted between runs. PreAct's gate, by contrast, runs an independent verify-replay between Run~1 and Run~2; transient evaluator noise (cov$=$50\% partial-replays, dynamic page-load timing) sometimes triggers a false-rejection that deletes a program that would have worked at warm time. \textbf{The verify-gate is a structurally correct filter that has a small false-rejection cost on benchmarks where the warm task is identical to the cold task.} On Android and OSWorld, where the same gate produces $+1.2$ and $+0.2$ warm $\Delta$ vs.\ $-1.4$ and $-2.4$ for gate-OFF (Tables~\ref{tab:gate-android}, \ref{tab:gate-osworld}), the rejection's protective value dominates. On WebArena's same-task replay protocol, the verbatim cache wins because the goal is identical.
+
+\textbf{Implication.} PreAct's harness is the right design when warm tasks are \emph{instances} of compiled programs (different parameters, different invocations of the same goal) on benchmarks where the compile artifact must withstand environmental drift. For benchmarks where the warm task is byte-identical to the cold task, a Muscle-Mem-style verbatim cache is competitive or better. The two designs make different bets: PreAct bets that compile-time verification matters more than blind-replay coverage; Muscle-Mem bets the opposite. Our cross-platform results indicate PreAct's bet pays off on Android and OSWorld; WebArena (with identical Run~2) tilts the other way.
 
 \subsection{What is \emph{Not} Load-Bearing}
 \label{sec:eval-not-loadbearing}
