@@ -448,6 +448,28 @@ WebArena's two-run protocol replays the \emph{same task} on Run~2, so a verbatim
 
 \textbf{Implication.} PreAct's harness is the right design when warm tasks are \emph{instances} of compiled programs (different parameters, different invocations of the same goal) on benchmarks where the compile artifact must withstand environmental drift. For benchmarks where the warm task is byte-identical to the cold task, a Muscle-Mem-style verbatim cache is competitive or better. The two designs make different bets: PreAct bets that compile-time verification matters more than blind-replay coverage; Muscle-Mem bets the opposite. Our cross-platform results indicate PreAct's bet pays off on Android and OSWorld; WebArena (with identical Run~2) tilts the other way.
 
+\subsection{Compile-LLM Robustness: Gemini vs Claude Compile}
+\label{sec:eval-compile-llm}
+
+To test whether the verify-gate's smoking-gun rate is Claude-specific or a property of the compile step itself, we wired \texttt{PREACT\_COMPILE\_PROVIDER=gemini} that swaps the compile-step LLM from Claude Sonnet 4.6 to Gemini 3 Flash (the CUA loop and selector remain Claude). One WebArena rep ($n{=}1$) on the same 12-task shopping\_admin subset:
+
+\begin{table}[t]
+\centering
+\caption{Compile-LLM robustness: gate behavior under Claude vs Gemini compile, WebArena 12-task shopping\_admin gate-ON.}
+\label{tab:compile-llm}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Compile LLM & Cold SR & Warm SR & $\Delta$ & Gate-rejection rate \\
+\midrule
+Claude Sonnet 4.6 (mean of 4 reps) & 6.0/12 & 2.0/12 & $-4.0 \pm 2.94$ & $\sim 5/6 \approx 83\%$ \\
+Gemini 3 Flash ($n{=}1$ rep) & 6/12 & 0/12 & $-6$ & $8/9 \approx 89\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Cold SR is identical (50\% in both cases, dominated by the shared CUA loop). The gate's rejection rate is in the same band ($83$\% with Claude vs.\ $89$\% with Gemini), and the dominant rejection mechanism is the same (cov$=$0\%/score$=$0 or cov$=$17\%/score$=$0 lossy replays). The main qualitative difference: Gemini compiles tend to fail at very-first-step replay (cov$=$0\% modal) whereas Claude compiles run to completion but produce wrong answers (cov$=$100\% modal). Both failure modes are caught by the gate. The Gemini-compile warm SR (0/12) falls within the bimodal range observed across Claude-compile reps (4/4/0/0). \textbf{The verify-gate is mechanism-driven, not Claude-specific.}
+
 \subsection{What is \emph{Not} Load-Bearing}
 \label{sec:eval-not-loadbearing}
 
