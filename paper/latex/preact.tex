@@ -22,7 +22,7 @@ Computer-Using Agents (CUAs) re-derive solutions to familiar tasks on every invo
 
 We validate the load-bearing claim---that the verify-before-store gate is empirically \emph{necessary} for monotonicity---at multi-seed paper-grade rigor on \emph{three} structurally different platforms. A 2$\times$2 ablation (cold/warm $\times$ gate ON/OFF) gives a diff-of-deltas of \textbf{2.6 tasks} on AndroidWorld official-15 ($n{=}5$ seeds, sign-test $p < 0.001$), \textbf{2.6 tasks} on OSWorld test\_tiny ($n{=}5$ reps), and \textbf{1.75 tasks} on a 12-task WebArena shopping\_admin subset ($n{=}4{+}4$ symmetric). The cross-platform meta-test on $14$ paired observations all favoring the gate or tied yields $p \approx 1.2 \times 10^{-4}$ under the no-effect null. Under gate-OFF the lossy-replay mechanism is fully observable: across both Android+OSWorld we document five reproducible cov$=$100\%/score$=$0 warm replays; on WebArena gate-OFF \emph{all 48 warm replays score 0} across 4/4 reps. The gate either intercepts these at compile time (the WebArena harness with the gate ON deletes 4--5 lossy compiles per rep before storage) or, on Android/OSWorld, prevents them from entering the corpus in the first place. Cold$\to$warm monotonicity itself holds across three Gemini seeds (mean $\Delta = +1.33 \pm 0.58$); cross-model replication with Claude Sonnet 4.6 reproduces the cold SR exactly.
 
-Equally informative are the \emph{negative} findings: code-level runtime guardrails are aggregate-neutral at $n{=}5$ (cold means identical, $10.2 = 10.2$); prompt-level Pre-Act content is dead code in the production CUA path; an embedding-RAG selector baseline is empirically competitive with our agentic LLM selector ($87\%$ vs.\ $76\%$ functional retrieval at the same 0\% wrong-task rate); and on WebArena's same-task replay protocol, a Muscle-Mem-style verbatim cache outperforms PreAct's gate ($\Delta=-2$ vs.\ $-4$) because the gate's protective rejections cost more than they save when the warm task is byte-identical to the cold task. PreAct's bet---compile-and-verify---pays off where compile artifacts must withstand drift (Android, OSWorld); the simpler verbatim-cache bet wins when they don't (WebArena). The harness---not prompts or guardrails---is the contribution.
+Equally informative are the \emph{negative} findings: code-level runtime guardrails are aggregate-neutral at $n{=}5$ (cold means identical, $10.2 = 10.2$); prompt-level Pre-Act content is dead code in the production CUA path; and an embedding-RAG selector baseline is empirically competitive with our agentic LLM selector ($87\%$ vs.\ $76\%$ functional retrieval at the same 0\% wrong-task rate). On WebArena's same-task replay protocol, a matched $n{=}4{+}4$ head-to-head against \emph{Muscle-Mem}~\cite{musclemem}---a verbatim-action-cache baseline with full-CUA fallback on cache miss---shows Muscle-Mem outperforming PreAct's gate-ON warm SR by $\sim 3.25$ tasks on average (Muscle-Mem warm-$\Delta = -0.75 \pm 1.50$ vs.\ PreAct gate-ON $-4.0 \pm 2.94$; one-tailed Welch $p \approx 0.05$). The mechanism is asymmetric fallback: Muscle-Mem's cache-miss falls through cleanly to a fresh CUA run, whereas PreAct's gate-reject leaves Run~2 with no artifact to replay. The harness is the right design where compile artifacts must withstand drift (Android, OSWorld); on byte-identical-replay benchmarks (WebArena), giving the harness an explicit cache-miss-to-CUA path would likely close the gap. The harness---not prompts or guardrails---is the contribution.
 \end{abstract}
 
 \section{Introduction}
@@ -30,9 +30,9 @@ Equally informative are the \emph{negative} findings: code-level runtime guardra
 
 \subsection{The Rerun Crisis}
 
-Computer-Using Agents based on the Observation--Reasoning--Action paradigm~\cite{yao2023react,anthropic2024computeruse} re-derive their solutions to familiar tasks at every invocation. A user who runs ``mark today's calendar event as complete'' on Monday and again on Tuesday pays the same 4--5 seconds of vision-token processing per step on both days, even though Tuesday's UI traversal is identical. This is the \emph{rerun crisis}~\cite{chundru2026rerun}: $O(M \times N)$ LLM cost on tasks the agent has already solved, where $M$ is the user's daily task count and $N$ is the per-task LLM call count.
+Computer-Using Agents based on the Observation--Reasoning--Action paradigm~\cite{yao2023react,anthropic2024computeruse} re-derive their solutions to familiar tasks at every invocation. A user who runs ``mark today's calendar event as complete'' on Monday and again on Tuesday pays the same 4--5 seconds of vision-token processing per step on both days, even though Tuesday's UI traversal is identical. We call this the \emph{rerun crisis}: $O(M \times N)$ LLM cost on tasks the agent has already solved, where $M$ is the user's daily task count and $N$ is the per-task LLM call count.
 
-Two prior research directions attack this gap. \textbf{Skill systems} (CUA-Skill, Memento, SAGE~\cite{wang2024sage}) save agent behaviors as parameterized skills; the skills still require an LLM-bound loop at execution time, retaining most of the per-step inference cost. \textbf{Compilation systems} (Compiled-AI~\cite{compiledai2025}, Agentic Compilation, ActionEngine~\cite{actionengine2026}) compile workflows into deterministic code; the deterministic-code regime targets narrow business-logic functions or, in ActionEngine's case, generates flat Python scripts from a state machine that is built via untargeted application crawling rather than goal-directed task execution. Concurrent record/replay systems---Muscle-Mem~\cite{musclemem}, AgentRR~\cite{agentrr2025}, Workflow-Use~\cite{workflowuse}---store linear action sequences with agent fallback if the cache misses; the stored representation has no formal state verification, no conditional branching, and no incremental refinement.
+Two prior research directions attack this gap. \textbf{Skill systems} (CUA-Skill, Memento, SAGE~\cite{liang2024sage}) save agent behaviors as parameterized skills; the skills still require an LLM-bound loop at execution time, retaining most of the per-step inference cost. \textbf{Compilation systems} (Compiled-AI~\cite{compiledai2026}, Agentic Compilation, ActionEngine~\cite{actionengine2026}) compile workflows into deterministic code; the deterministic-code regime targets narrow business-logic functions or, in ActionEngine's case, generates flat Python scripts from a state machine that is built via untargeted application crawling rather than goal-directed task execution. Concurrent record/replay systems---Muscle-Mem~\cite{musclemem}, AgentRR~\cite{agentrr2025}, Workflow-Use~\cite{workflowuse}---store linear action sequences with agent fallback if the cache misses; the stored representation has no formal state verification, no conditional branching, and no incremental refinement.
 
 \subsection{PreAct's Position}
 
@@ -138,7 +138,7 @@ Algorithm~\ref{alg:harness} states the loop formally.
 \caption{PreAct verified compile-extend-replace loop}
 \label{alg:harness}
 \begin{algorithmic}[1]
-\Require Task goal $T$, environment $\textit{env}$, program corpus $C$, replay-coverage threshold $\tau$ (default 0.5; replays with $\textit{cov} \leq \tau$ fall through to CUA-hybrid mode)
+\Require Task goal $T$, environment $\textit{env}$, program corpus $C$, replay-coverage threshold $\tau$ (default 0.5)
 \State $P \gets \textsc{Selector}(T, C)$ \Comment{LLM-agentic; may return $\bot$}
 \State $r \gets \textsc{None}$
 \If{$P \neq \bot$}
@@ -147,7 +147,7 @@ Algorithm~\ref{alg:harness} states the loop formally.
     \State \textbf{return} $r$ \Comment{warm path: trusted replay}
   \EndIf
 \EndIf
-\State $r \gets \textsc{CUA}(T, \textit{env})$ \Comment{or hybrid: continue from where replay broke}
+\State $r \gets \textsc{CUA}(T, \textit{env}, r)$ \Comment{hybrid: when $r{\neq}\textsc{None}$, CUA continues from the partial-replay state}
 \If{$\neg r.\textit{success}$} \textbf{return} $r$ \EndIf
 \State $P' \gets \textsc{Compile}(r.\textit{trace})$ \Comment{LLM-driven trace $\to$ state-machine}
 \State $\textit{env}' \gets \textsc{Reset}(\textit{env}, T)$ \Comment{independent re-evaluation environment}
@@ -204,11 +204,11 @@ When the selector returns ``no candidate'' or replay fails, the harness invokes 
 \subsection{Setup}
 \label{sec:eval-setup}
 
-\textbf{Benchmarks.} We evaluate on (a) AndroidWorld~\cite{rawles2024androidworld} ``official-15'' subset (15 tasks across 8 application domains; the curated subset used by the upstream T3A baseline), and (b) OSWorld~\cite{xie2024osworld} ``test\_tiny'' subset (6 tasks across Chrome, LibreOffice Calc, and LibreOffice Writer).
+\textbf{Benchmarks.} We evaluate on (a) AndroidWorld~\cite{rawles2024androidworld} ``official-15'' subset (15 tasks across 8 application domains; the curated subset used by the upstream T3A baseline), (b) OSWorld~\cite{xie2024osworld} ``test\_tiny'' subset (6 tasks across Chrome, LibreOffice Calc, and LibreOffice Writer), and (c) a 12-task shopping\_admin subset of WebArena~\cite{zhou2024webarena} (string-match answer-extraction tasks on a Magento e-commerce admin panel).
 
-\textbf{Models.} For Android CUA, we use Gemini 3 Flash via the multi-provider port; this is roughly 10$\times$ cheaper than Claude Sonnet 4.6 at equivalent SR (we confirm this with cross-model replication in \S\ref{sec:eval-monotonic}). For OSWorld CUA, we use Claude Sonnet 4.6 via Anthropic's Computer-Use API. For program compilation and selector reasoning, we use Claude Sonnet 4.6 throughout.
+\textbf{Models.} For Android CUA, we use Gemini 3 Flash via the multi-provider port; this is roughly 10$\times$ cheaper than Claude Sonnet 4.6 at equivalent SR (we confirm this with cross-model replication in \S\ref{sec:eval-monotonic}). For OSWorld and WebArena CUA, we use Claude Sonnet 4.6 via Anthropic's Computer-Use API. For program compilation and selector reasoning, we use Claude Sonnet 4.6 throughout.
 
-\textbf{Container.} AndroidWorld runs in \texttt{huggingface/android\_world:latest} with the PreAct \texttt{/state} endpoint patch applied via volume-mount. OSWorld uses \texttt{happysixd/osworld-docker} via the \texttt{DesktopEnv} provider.
+\textbf{Container.} AndroidWorld runs in \texttt{huggingface/android\_world:latest} with the PreAct \texttt{/state} endpoint patch applied via volume-mount. OSWorld uses \texttt{happysixd/osworld-docker} via the \texttt{DesktopEnv} provider. WebArena uses the canonical \texttt{shopping\_admin\_final\_0719} Magento Docker stack.
 
 \textbf{Multi-seed protocol.} For each seed in \{42, 100, 1337, 2024, 7777\}, we move the existing \texttt{rag\_db/} aside (preserving prior state) and start a fresh empty corpus. We then run cold (empty corpus) followed by warm (cold-built corpus) on the same task list.
 
@@ -245,7 +245,7 @@ The \emph{mode-shift} column quantifies the extent to which warm runs use retrie
 \subsection{Verify-Before-Store is Empirically Necessary for Monotonicity}
 \label{sec:eval-gate}
 
-Figure~\ref{fig:diff-of-deltas} previews the load-bearing finding: the verify-gate's marginal value (the cold-to-warm delta with the gate ON minus the same delta with it OFF) is 2.6 tasks on Android, 2.6 tasks on OSWorld, and 1.75 tasks on WebArena's 12-task subset.
+Figure~\ref{fig:diff-of-deltas} previews the central finding: the verify-gate's marginal value (the cold-to-warm delta with the gate ON minus the same delta with it OFF) is 2.6 tasks on Android, 2.6 tasks on OSWorld, and 1.75 tasks on WebArena's 12-task subset.
 
 \begin{figure}[t]
 \centering
@@ -304,7 +304,7 @@ Figure~\ref{fig:diff-of-deltas} previews the load-bearing finding: the verify-ga
 \label{fig:diff-of-deltas}
 \end{figure}
 
-This is the load-bearing experiment. We run a 2$\times$2 ablation (cold/warm $\times$ verify-gate ON/OFF) at $n{=}5$ seeds on AndroidWorld, $n{=}5$ repetitions on OSWorld test\_tiny, and $n{=}4{+}4$ symmetric on WebArena's 12-task shopping\_admin subset.
+This is the central experiment of the paper. We run a 2$\times$2 ablation (cold/warm $\times$ verify-gate ON/OFF) at $n{=}5$ seeds on AndroidWorld, $n{=}5$ repetitions on OSWorld test\_tiny, and $n{=}4{+}4$ symmetric on WebArena's 12-task shopping\_admin subset.
 
 \subsubsection{AndroidWorld ($n{=}5$ seeds)}
 
@@ -357,7 +357,7 @@ Rep & Cold ON & Warm ON & $\Delta$ ON & Cold OFF & Warm OFF & $\Delta$ OFF \\
 
 The OSWorld diff-of-deltas is $0.2 - (-2.4) = 2.6$ tasks, or 43 percentage points on the 6-task subset. \emph{This is identical in magnitude to the Android $n{=}5$ diff-of-deltas of 2.6 tasks (17.3 pp on the 15-task subset)}---the cross-platform mechanism produces the same numerical effect on the gate's marginal value, despite the different platforms, models (Gemini for Android, Claude for OSWorld), and task subsets. All five OFF reps regress ($\Delta < 0$); all five ON reps are non-decreasing ($\Delta \geq 0$). One-tailed sign test under the null: $p = 0.031$ in each direction.
 
-The lossy-replay mechanism (\S\ref{sec:smoking-gun-section}) is partially but not 100\% deterministic: the cov$=$100\%/score$=$0 pattern reproduces 4--5 of 5 reps for the most reliable smoking-gun task (43188217, LibreOffice Calc formula---5/5 reps fail), with intermediate reproducibility on others (c1f04f87 chart task: 4/5, 8f0fdfa4 Chrome history: 2/5). The \emph{aggregate} regression---all 5 reps lose $\geq 2$ tasks under gate-OFF---is fully deterministic across reps.
+The lossy-replay mechanism (\S\ref{sec:smoking-gun-section}) is partially but not 100\% deterministic: the cov$=$100\%/score$=$0 pattern reproduces 4--5 of 5 reps for the most reproducible task (43188217, LibreOffice Calc formula---5/5 reps fail), with intermediate reproducibility on others (c1f04f87 chart task: 4/5, 8f0fdfa4 Chrome history: 2/5). The \emph{aggregate} regression---all 5 reps lose $\geq 2$ tasks under gate-OFF---is fully deterministic across reps.
 
 \subsubsection{WebArena ($n{=}4{+}4$ symmetric, 12 shopping\_admin tasks)}
 \label{sec:eval-webarena}
@@ -366,9 +366,9 @@ To extend the cross-platform replication to a third structurally different envir
 
 \textbf{Gate OFF (harness default, $n{=}4$ reps).} Rep deltas: $-4, -5, -8, -6$. Cold mean $5.75 \pm 1.71$, warm mean \textbf{$0 \pm 0$}, $\Delta_\text{OFF,mean} = -5.75 \pm 1.71$. \textbf{All 48 gate-OFF warm replays score 0}---perfect 100\% replay-failure reproducibility across reps, the highest of any platform. The lossy-replay mechanism is sharper here than on Android or OSWorld because WebArena's shopping\_admin tasks are answer-extraction-heavy (``what is the top-1 best-selling product in 2022''). The compiled program captures a sequence of navigations followed by an \texttt{inspect\_screenshot} on the bestseller-table cell. On Run 2's fresh browser state, the \texttt{inspect\_screenshot} returns whatever value is on the live page---which the live evaluator scores against a string-match criterion from the run-1 snapshot. Cross-task corpus pollution makes this worse: the agentic Selector retrieves a stale bestseller-extractor for review-counting tasks (cold-passing tasks whose warm replays therefore fail), demonstrating that gate-OFF's pollution interferes with retrieval on \emph{unrelated} task families.
 
-\textbf{Gate ON (patched harness, $n{=}4$ reps).} Rep deltas: $-1, -2, -7, -6$. Cold mean $6.0 \pm 0.82$, warm mean $2.0 \pm 2.31$, $\Delta_\text{ON,mean} = -4.0 \pm 2.94$. Warm SR is bimodal: reps 1--2 had a verified review-counter program that served 4 warm replays at 8.5--13$\times$ speedup; reps 3--4 had every compile rejected by the gate (LLM compile fidelity collapsed uniformly under heavy concurrent load), leaving the corpus empty and warm SR at 0/12. Across all 4 reps the gate fired \emph{at least} 4 $\Delta$replay-fail events per rep at compile time, capturing the same lossy-replay mechanism that gate-OFF only exposes at warm time.
+\textbf{Gate ON (patched harness, $n{=}4$ reps).} Rep deltas: $-1, -2, -7, -6$. Cold mean $6.0 \pm 0.82$, warm mean $2.0 \pm 2.31$, $\Delta_\text{ON,mean} = -4.0 \pm 2.94$. Warm SR is bimodal: reps 1--2 each retained a verified review-counter program (the canonical \texttt{number\_of\_reviews\_mentioning\_term} task) that served 4 warm replays at 8.5--13$\times$ speedup; reps 3--4 had every cold-pass task compile rejected by the gate, leaving the corpus empty and warm SR at 0/12. The mechanism of rejection is the same in all 4 reps: the compiled program's state-verification predicates (e.g.\ \texttt{state=reviews\_index\_page} matched via XPath patterns generated by the LLM compiler) fail to match the live page on a fresh browser session, the replayer reports \texttt{cov} between 0 and 12\%, and the gate consequently deletes the new program. The bimodality across reps is attributable to which cold-pass tasks happened to compile into robust-enough predicates---reps 1--2 happened to include the review-counter task whose compile produced verifiable predicates, reps 3--4 did not---rather than to a transient API condition.
 
-\textbf{Mechanism observed.} The gate is faithful: when the LLM produces a compile that does pass an independent verify-replay, the corpus retains it and the harness reaps the speedup (reps 1--2). When the LLM produces only lossy compiles---a reproducible failure mode under high concurrent API load---the gate correctly rejects everything, leaving the corpus empty and warm SR at 0/12 (reps 3--4). \emph{The gate never stores a program that produces score=0 on verify-replay.} Gate-OFF, in contrast, accumulates these lossy programs unconditionally: across $4 \times 12 = 48$ warm replays, every single one scores 0.
+\textbf{Mechanism observed.} The gate is faithful: when the LLM produces a compile that does pass an independent verify-replay, the corpus retains it and the harness reaps the speedup (reps 1--2). When the LLM produces only lossy compiles---a reproducible failure mode on WebArena-class tasks whose answer extraction depends on dynamic page state---the gate correctly rejects everything, leaving the corpus empty and warm SR at 0/12 (reps 3--4). \emph{The gate never stores a program that produces score=0 on verify-replay.} Gate-OFF, in contrast, accumulates these lossy programs unconditionally: across $4 \times 12 = 48$ warm replays, every single one scores 0.
 
 \textbf{Diff-of-deltas: $\Delta_\text{ON,mean} - \Delta_\text{OFF,mean} = -4.0 - (-5.75) = 1.75$ tasks ($\approx 15$\,pp on the 12-task subset).} Sign-test on the 4 paired comparisons: $\Delta_\text{ON} > \Delta_\text{OFF}$ in reps 1, 2, and 3 (margins $+3, +3, +1$); rep-4 is a tie ($-6 = -6$). Three of three non-tie pairs favor gate-ON ($p = 0.125$ one-tailed on $n{=}3$). Combined with Android ($n{=}5$) and OSWorld ($n{=}5$) above, the cross-platform meta-test on $14$ paired observations all favoring gate-ON or tied yields $p = (1/2)^{13} \approx 1.2 \times 10^{-4}$ under the null hypothesis of no effect. The result extends the gate-necessity claim to three structurally different platforms, three LLM backends, and three task evaluation paradigms (Android end-state UI predicates, OSWorld desktop-state evaluators, WebArena string-match on extracted answers).
 
@@ -394,7 +394,7 @@ OSWorld & LibreOffice Calc chart & c1f04f87 & Replay completes; chart properties
 \end{tabular}
 \end{table}
 
-These five cases (and the dense WebArena set) are exactly the lossy-compile pattern the verify-gate exists to filter: \emph{the program ``runs'' but does not accomplish the goal.} Without the gate, they enter the corpus and produce 14\%--50\% warm-SR regression on Android/OSWorld and a complete 0/12 wipeout on WebArena. With the gate, they are rejected at compile time; the corpus contains only programs that have independently re-passed an evaluation cycle.
+These five cases (and the dense WebArena set) are exactly the lossy-compile pattern the verify-gate exists to filter: \emph{the program ``runs'' but does not accomplish the goal.} Without the gate, they enter the corpus and produce 14--50\% warm-SR regression on Android/OSWorld and a complete 0/12 wipeout on WebArena. With the gate, they are rejected at compile time; the corpus contains only programs that have independently re-passed an evaluation cycle.
 
 \subsection{Selector Backend Ablation: Embedding-RAG vs.\ Agentic LLM}
 \label{sec:eval-selector-ablation}
@@ -423,35 +423,35 @@ Two findings emerge from Table~\ref{tab:selector-ablation}. \textbf{First, embed
 \subsection{Head-to-Head: Direct Baselines on WebArena}
 \label{sec:eval-baselines}
 
-To address the recurring question of whether PreAct's harness actually beats simpler memory schemes, we ran two direct baselines on the WebArena 12-task shopping\_admin subset: \textbf{Muscle-Mem}~\cite{musclemem}, which records the linear action sequence and replays it blindly with full-CUA fallback on any failure, and \textbf{Workflow-Use}~\cite{workflowuse}, which stores per-task workflows and replays them with no verification. Same harness, same tasks, same backend (Claude Sonnet 4.6).
+To address the recurring question of whether PreAct's harness actually beats simpler memory schemes, we ran two direct baselines on the WebArena 12-task shopping\_admin subset at $n{=}4$ reps each (matching the PreAct gate-ON / gate-OFF sample size of \S\ref{sec:eval-webarena}): \textbf{Muscle-Mem}~\cite{musclemem}, which records the linear action sequence and replays it blindly with full-CUA fallback on any failure, and \textbf{Workflow-Use}~\cite{workflowuse}, which stores per-task workflows and replays them with no verification. Same harness, same tasks, same backend (Claude Sonnet 4.6).
 
 \begin{table}[t]
 \centering
-\caption{Head-to-head baselines on WebArena shopping\_admin 12-task subset, $n{=}1$ (cold + warm).}
+\caption{Head-to-head baselines on WebArena shopping\_admin 12-task subset, $n{=}4$ reps each. PreAct rows reproduced from Table~\ref{tab:gate-android}'s WebArena column / \S\ref{sec:eval-webarena}.}
 \label{tab:baselines}
 \small
 \begin{tabular}{@{}lcccc@{}}
 \toprule
-System & Cold SR & Warm SR & $\Delta$ & Smoking-gun replays \\
+System & Cold SR & Warm SR & $\Delta$ (warm$-$cold) & Notes \\
 \midrule
-Muscle-Mem (blind linear cache) & 7/12 (58\%) & 5/12 (42\%) & $-2$ & 7/12 cov$=$50\% \\
-Workflow-Use (per-task scripts) & 7/12 (58\%) & 0/12 (0\%) & $-7$ & 12/12 cov$=$0\% \\
-PreAct gate-OFF (mean of 4 reps) & 5.75/12 & 0/12 & $-5.75$ & 48/48 cov$=$100\%/score$=$0 \\
-\textbf{PreAct gate-ON (mean of 4 reps)} & 6.0/12 & 2.0/12 & $-4.0$ & 5--6/16 compile-time rejections \\
+Muscle-Mem (blind linear cache) & $7.0 \pm 1.41$ & $6.25 \pm 0.96$ & $-0.75 \pm 1.50$ & Cache miss $\to$ CUA fallback per task \\
+Workflow-Use (per-task scripts) & $7.0 \pm 0.82$ & $0 \pm 0$ & $-7.0 \pm 0.82$ & Script replay fails; eval fallback wins exec but not score \\
+PreAct gate-OFF (verify gate disabled) & $5.75 \pm 1.71$ & $0 \pm 0$ & $-5.75 \pm 1.71$ & Stores every compile; warm SR collapses on lossy programs \\
+\textbf{PreAct gate-ON (verify gate enabled)} & $6.0 \pm 0.82$ & $2.0 \pm 2.31$ & $-4.0 \pm 2.94$ & Gate rejects $\approx 83\%$ of compiles; bimodal warm SR (4/4/0/0) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The honest reading of Table~\ref{tab:baselines}: \textbf{Muscle-Mem outperforms PreAct gate-ON on warm SR} for this WebArena subset ($-2$ vs.\ $-4$), and matches PreAct gate-ON on cold. Workflow-Use behaves like PreAct gate-OFF (0/12 warm). Why does the simpler approach win on this benchmark?
+The honest reading of Table~\ref{tab:baselines}: at matched $n{=}4$, \textbf{Muscle-Mem outperforms PreAct gate-ON on this benchmark}. Muscle-Mem's warm-SR mean ($6.25/12 = 52\%$) is more than $3\times$ PreAct gate-ON's ($2.0/12 = 17\%$); the warm-$\Delta$ gap is $-0.75$ vs.\ $-4.0$, i.e.\ Muscle-Mem loses about $3.25$ fewer tasks than PreAct does on the cold-to-warm transition. A two-sample Welch's $t$-test on the 4-vs-4 warm-$\Delta$ comparison yields $t \approx 2.0$, $p \approx 0.05$ (one-tailed), so the effect is at the threshold of significance at $n{=}4$ but the direction is unambiguous: every rep favors or ties Muscle-Mem on warm SR. Workflow-Use, by contrast, behaves like PreAct gate-OFF (warm SR $0/12$ in every rep)---it stores compiled scripts without verification and, like gate-OFF, suffers complete warm-time collapse when the scripts encounter live-page selectors that don't match.
 
-WebArena's two-run protocol replays the \emph{same task} on Run~2, so a verbatim-action-sequence cache benefits when page state hasn't drifted between runs. PreAct's gate, by contrast, runs an independent verify-replay between Run~1 and Run~2; transient evaluator noise (cov$=$50\% partial-replays, dynamic page-load timing) sometimes triggers a false-rejection that deletes a program that would have worked at warm time. \textbf{The verify-gate is a structurally correct filter that has a small false-rejection cost on benchmarks where the warm task is identical to the cold task.} On Android and OSWorld, where the same gate produces $+1.2$ and $+0.2$ warm $\Delta$ vs.\ $-1.4$ and $-2.4$ for gate-OFF (Tables~\ref{tab:gate-android}, \ref{tab:gate-osworld}), the rejection's protective value dominates. On WebArena's same-task replay protocol, the verbatim cache wins because the goal is identical.
+\textbf{Mechanism: cache miss vs.\ verify-reject.} WebArena's two-run protocol replays the \emph{same task} on Run~2, so the relevant question is what happens when the stored artifact does not match the live page. Muscle-Mem's blind-replay attempt fails fast (typical $\sim 30$\,s before timing out on a missing selector), and the harness then falls through to a fresh CUA run that re-solves the task with the original LLM cost. PreAct's verify-before-store gate, by contrast, runs an independent verify-replay between Run~1 and Run~2; on these WebArena tasks the compiled state-machine predicates are brittle enough (e.g.\ \texttt{state=reviews\_index\_page} matched via XPath patterns) that they fail re-verification even on the cold-pass task, so the gate deletes the program and Run~2 has no artifact to fall back to. \emph{Muscle-Mem's advantage on WebArena is not that its replay is more reliable---it isn't, with reps showing cache miss rates of $50$--$67\%$---but that its cache-miss path falls through cleanly to CUA, whereas PreAct's gate-reject path leaves no artifact for Run~2 at all.}
 
-\textbf{Implication.} PreAct's harness is the right design when warm tasks are \emph{instances} of compiled programs (different parameters, different invocations of the same goal) on benchmarks where the compile artifact must withstand environmental drift. For benchmarks where the warm task is byte-identical to the cold task, a Muscle-Mem-style verbatim cache is competitive or better. The two designs make different bets: PreAct bets that compile-time verification matters more than blind-replay coverage; Muscle-Mem bets the opposite. Our cross-platform results indicate PreAct's bet pays off on Android and OSWorld; WebArena (with identical Run~2) tilts the other way.
+\textbf{Implication.} The two designs make different bets: PreAct bets that compile-time verification matters more than coverage; Muscle-Mem bets that even partial-cache + full-CUA-fallback is better than a verified-or-empty corpus. Our $n{=}5{+}5$ cross-platform results indicate PreAct's bet pays off on Android and OSWorld (Tables~\ref{tab:gate-android}, \ref{tab:gate-osworld}: gate-ON $\Delta = +1.2$ and $+0.2$ vs.\ gate-OFF $-1.4$ and $-2.4$, where the protective value of rejecting lossy compiles dominates). On WebArena's same-task replay protocol with brittle answer-extraction predicates, the $n{=}4$ head-to-head says the opposite. We treat this as evidence that PreAct's harness as currently implemented is the right design for stateful UI tasks where compile artifacts must withstand drift, and the wrong design for byte-identical-replay benchmarks where a Muscle-Mem-style cache-miss-then-CUA pipeline is dominant. A productive direction (\S\ref{sec:conclusion}) is to give the harness an explicit cache-miss path on Run~2 when no verified program exists, matching Muscle-Mem's fallback semantics without abandoning the gate on Android/OSWorld.
 
-\subsection{Compile-LLM Robustness: Gemini vs Claude Compile}
+\subsection{Compile-LLM Robustness: Gemini vs Claude Compile (Preliminary)}
 \label{sec:eval-compile-llm}
 
-To test whether the verify-gate's smoking-gun rate is Claude-specific or a property of the compile step itself, we wired \texttt{PREACT\_COMPILE\_PROVIDER=gemini} that swaps the compile-step LLM from Claude Sonnet 4.6 to Gemini 3 Flash (the CUA loop and selector remain Claude). One WebArena rep ($n{=}1$) on the same 12-task shopping\_admin subset:
+\emph{This subsection reports a single-rep preliminary observation; readers should weight it accordingly.} To probe whether the verify-gate's compile-rejection rate is Claude-specific or a property of the compile step itself, we wired \texttt{PREACT\_COMPILE\_PROVIDER=gemini}, which swaps the compile-step LLM from Claude Sonnet 4.6 to Gemini 3 Flash (the CUA loop and selector remain Claude). We ran one WebArena rep ($n{=}1$) on the same 12-task shopping\_admin subset:
 
 \begin{table}[t]
 \centering
@@ -468,7 +468,7 @@ Gemini 3 Flash ($n{=}1$ rep) & 6/12 & 0/12 & $-6$ & $8/9 \approx 89\%$ \\
 \end{tabular}
 \end{table}
 
-Cold SR is identical (50\% in both cases, dominated by the shared CUA loop). The gate's rejection rate is in the same band ($83$\% with Claude vs.\ $89$\% with Gemini), and the dominant rejection mechanism is the same (cov$=$0\%/score$=$0 or cov$=$17\%/score$=$0 lossy replays). The main qualitative difference: Gemini compiles tend to fail at very-first-step replay (cov$=$0\% modal) whereas Claude compiles run to completion but produce wrong answers (cov$=$100\% modal). Both failure modes are caught by the gate. The Gemini-compile warm SR (0/12) falls within the bimodal range observed across Claude-compile reps (4/4/0/0). \textbf{The verify-gate is mechanism-driven, not Claude-specific.}
+Cold SR is identical (50\% in both cases, dominated by the shared CUA loop). The gate's rejection rate is in the same band ($83$\% with Claude vs.\ $89$\% with Gemini), and the dominant rejection mechanism is the same (cov$=$0\%/score$=$0 or cov$=$17\%/score$=$0 lossy replays). Qualitatively, Gemini compiles tend to fail at very-first-step replay (cov$=$0\% modal) whereas Claude compiles run to completion but produce wrong answers (cov$=$100\% modal); both failure modes are caught by the gate. The Gemini-compile warm SR (0/12) falls within the bimodal range observed across Claude-compile reps (4/4/0/0). \emph{This single-rep observation is consistent with a compile-step mechanism that is not Claude-specific, but a stronger claim would require $n \geq 3$ reps; we flag this as a preliminary finding (see L1 in §\ref{sec:appendix-limitations}).}
 
 \subsection{What is \emph{Not} Load-Bearing}
 \label{sec:eval-not-loadbearing}
@@ -530,24 +530,22 @@ The most striking quantitative observation in this paper is that the verify-gate
 
 Instead, the diff-of-deltas magnitude is structural: it is the rate at which the underlying \emph{compile} step produces lossy state-machine programs. Across platforms and models that rate appears to be approximately the same fraction of compiled-and-executed programs. The \emph{absolute} regression varies more (43 pp on OSWorld's 6-task subset, 17 pp on Android's 15-task subset, 15 pp on WebArena's 12-task subset), but the \emph{absolute number of tasks} affected falls in the same range. We interpret this as: the lossy-compile rate is a property of the compile step (LLM trace $\to$ state-machine), not of the platform or evaluator. The cross-platform meta-test on the 14 paired observations across all three platforms yields $p \approx 1.2 \times 10^{-4}$ under the null hypothesis of no gate effect.
 
-\subsection{Smoking-Gun Reproducibility}
+\subsection{Per-Program Reproducibility of cov$=$100\%/score$=$0}
 
-The five smoking-gun cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps---the OSWorld Calc-formula program reproduces 5/5 reps, the Calc-chart 4/5, and the Chrome-history 2/5 (per-program breakdown in Appendix~H). \textbf{Crucially, the aggregate regression remains fully deterministic.} All 5 OFF reps lose at least 2 tasks; no rep escapes the regression. The selector and replayer's per-task behavior is partially nondeterministic, but the gate-OFF condition reliably produces $\geq 2$-task regression on every rep. This is the property paper claims should rest on, not the per-task smoking guns.
+The five cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps---the OSWorld Calc-formula program reproduces 5/5 reps, the Calc-chart 4/5, and the Chrome-history 2/5 (per-program breakdown in Appendix~H). \textbf{Crucially, the aggregate regression remains fully deterministic.} All 5 OFF reps lose at least 2 tasks; no rep escapes the regression. The selector and replayer's per-task behavior is partially nondeterministic, but the gate-OFF condition reliably produces $\geq 2$-task regression on every rep. The paper's claims rest on this aggregate-level determinism, not on per-program reproducibility.
 
 \subsection{Harness-Deterministic vs.\ LLM-Driven Failures}
 
 Three AndroidWorld tasks (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) and one OSWorld task (LibreOffice Writer macro) fail across all five seeds, both LLM backends (Claude and Gemini), all four guardrail/budget configurations, and both verify-gate conditions. These failures are \emph{harness-deterministic}: they are properties of the UI patterns themselves (status-bar stale reads, scroll-on-seekbar incompatibility, image-canvas-not-in-a11y-tree) rather than properties of the agent's reasoning. They bound the benchmark, not the method.
 
-\subsection{Out-of-Distribution Generalization}
+\subsection{Out-of-Distribution Generalization (Preliminary)}
 \label{sec:eval-ood}
 
-We tested whether the corpus transfers beyond seen tasks by running a test\_tiny-built rag\_db on the 33 non-test\_tiny tasks of OSWorld test\_small. The result is \textbf{approximately neutral}: warm-OOD 21/30 = 70\% vs cold-OOD $\approx 20/30 = 67\%$ (1-task difference, within run-to-run noise). The corpus neither meaningfully helps by transferring abstractions across task families nor meaningfully hurts by retrieving inapplicable programs---the selector tends to return ``no candidate'' when the OOD task's description does not match a stored program. This clarifies the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is in repeated invocations of seen tasks, not cross-task generalization} (full breakdown in Appendix~E).
+We tested whether the corpus transfers beyond seen tasks by running a test\_tiny-built rag\_db on the 33 non-test\_tiny tasks of OSWorld test\_small ($n{=}1$ rep). The result is \textbf{approximately neutral}: warm-OOD 21/30 = 70\% vs cold-OOD $\approx 20/30 = 67\%$, a 1-task difference well within the cold-run-to-run noise observed at $n{=}5$ on test\_tiny ($\pm 0.45$ tasks). On this single-pass evidence the corpus appears neither to meaningfully help by transferring abstractions across task families nor to meaningfully hurt by retrieving inapplicable programs; the selector tends to return ``no candidate'' when the OOD task's description does not match a stored program. This tentatively suggests the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is in repeated invocations of seen tasks rather than cross-task generalization}, but a multi-rep replication is necessary to confirm whether the OOD effect is truly neutral or merely small-and-positive (full breakdown in Appendix~E).
 
 \subsection{Limitations}
 
-The closure table (Table~\ref{tab:gap-closure}) lists eight closed threats and one out-of-scope. Beyond those, we explicitly acknowledge five remaining limitations:
-
-Beyond the eight closed validity threats we acknowledge five remaining limitations:
+Beyond the eight validity threats closed in Table~\ref{tab:gap-closure}, we explicitly acknowledge five remaining limitations:
 \begin{itemize}[leftmargin=2em]\tightlist
 \item \textbf{(L1) Architectural baseline (partial).} A direct AB against an ActionEngine-style flat-script baseline at $n{=}5$ Android seeds gives flat-script $10.6 \pm 1.14$ vs.\ state-machine $11.67 \pm 0.58$ ($\Delta = +0.67$, $p = 0.125$): suggestive but not significant.
 \item \textbf{(L2) Benchmark coverage.} The 6-task OSWorld test\_tiny, 15-task AndroidWorld official-15, and 12-task WebArena shopping\_admin subsets are a small sample of computer-using tasks; absolute pp magnitudes are denominator-dependent (43/17/15 pp for 1.75--2.6 absolute tasks).
@@ -560,17 +558,28 @@ Detailed measurements and analysis for L1--L5 in Appendix~F.
 \section{Conclusion}
 \label{sec:conclusion}
 
-PreAct demonstrates that a \emph{verified self-extending executable code corpus} produces monotonic refinement on multi-platform CUA benchmarks. The harness---RAG retrieval, verify-before-store gate, agentic program selector, hybrid replay, and CUA fallback---is the load-bearing contribution: cross-platform $n{=}5{+}5{+}4$ ablation across three structurally different platforms (AndroidWorld, OSWorld, WebArena) shows the gate is empirically necessary for monotonicity, with reproducible cov$=$100\%/score$=$0 smoking-gun replays documenting the lossy-compile pattern it filters and a cross-platform meta-test $p \approx 10^{-4}$ under the no-effect null. Equally informative are the \emph{negative} findings: code-level runtime guardrails are aggregate-neutral, and prompt-level Pre-Act content is dead code in production. The harness is what works; the runtime add-ons are not load-bearing.
+PreAct demonstrates that a \emph{verified self-extending executable code corpus} produces monotonic refinement on multi-platform CUA benchmarks. The harness---RAG retrieval, verify-before-store gate, agentic program selector, hybrid replay, and CUA fallback---is the contribution: a cross-platform 2$\times$2 ablation at $n{=}5{+}5{+}4$ across three structurally different platforms (AndroidWorld, OSWorld, WebArena) shows the gate is empirically necessary for monotonicity, with reproducible cov$=$100\%/score$=$0 replays documenting the lossy-compile pattern it filters and a cross-platform meta-test $p \approx 10^{-4}$ under the no-effect null. The \emph{negative} findings are equally informative: code-level runtime guardrails are aggregate-neutral, and prompt-level Pre-Act content is dead code in production. The harness is what works; the runtime add-ons are not.
 
 The architectural commitment that makes this possible is \emph{the artifact is the runtime}: state-machine programs in PreAct's corpus are not flat scripts generated from a state machine but the directly-executable graphs themselves. What the agent ``remembers'' is what it can directly execute, and the corpus self-extends through verified compile cycles.
 
-Future work falls in three directions:
+Future work falls in four directions:
+
+\textbf{Cache-miss-to-CUA fallback on the gate path.} The Muscle-Mem head-to-head (\S\ref{sec:eval-baselines}) identifies a specific gap: when the verify-gate rejects a compile, Run~2 is left with no artifact and falls through to a placeholder (currently returning \texttt{no\_artifact}/score~0). Muscle-Mem's better warm SR on WebArena traces directly to the fact that its cache-miss path runs a fresh CUA on Run~2 and re-solves the task. Adding the same fallback to PreAct's harness---``if Run~1 was a gate-rejected compile, run a fresh CUA on Run~2 too''---would likely close the $-0.75$ vs.\ $-4.0$ warm-$\Delta$ gap on WebArena without sacrificing the gate's Android/OSWorld advantage. This is a small implementation change with an empirically validated motivation.
 
 \textbf{Scaling the corpus.} The current corpus (58 Android programs after multi-week experiments) is small. We have not characterized the corpus's behavior at $10^3$ or $10^4$ programs: does the agentic selector still discriminate accurately when the candidate set is large? Does dedup-signature collision become an issue? Does the verify-replay step cost become prohibitive at scale?
 
 \textbf{Architectural baselines.} The state-machine-as-executable claim deserves a direct AB against a flat-script baseline (e.g., an ActionEngine-style implementation that runs the same compile cycle but generates flat Python at the verify step). The current paper supports the claim by working implementation across two platforms but not by direct comparison.
 
 \textbf{Long-horizon tasks.} Both AndroidWorld and OSWorld have task horizons of order 10--30 actions. Tasks requiring long-term planning, goal decomposition, or recovery from compound failures (e.g., entire workflow tasks lasting hundreds of actions) are not represented in our benchmarks. We expect the harness's CUA-fallback mechanism to be tested most severely on such tasks; integration with explicit goal-decomposition planners is the natural next step.
+
+\section*{Reproducibility}
+\label{sec:reproducibility}
+
+\textbf{Code.} The PreAct harness, multi-seed run scripts, and the patched Android container endpoint (\texttt{android\_server\_patched.py}; see Appendix~D) are released at \url{https://github.com/bojieli/PreAct}. Algorithm~\ref{alg:harness} is implemented in \texttt{preact/cli.py} (top-level loop), \texttt{preact/executor/} (state-machine replayer), \texttt{preact/generator/} (compiler), and \texttt{preact/rag/} (corpus + selector). All env-var ablation knobs used in this paper are documented in the repo README: \texttt{PREACT\_VERIFY\_GATE}, \texttt{PREACT\_GUARDRAILS}, \texttt{PREACT\_SELECTOR\_MODE}, \texttt{PREACT\_COMPILE\_PROVIDER}, \texttt{PREACT\_RUNTIME\_MODE}, \texttt{PREACT\_LLM\_PROVIDER}, and \texttt{RAG\_DB\_PATH}.
+
+\textbf{Data.} Per-seed rag\_db snapshots for each cold and warm run (Tables~\ref{tab:monotonic}, \ref{tab:gate-android}, \ref{tab:gate-osworld}, \ref{tab:guardrails}) are preserved under \texttt{rag\_db\_*} directories named after the experiment and seed; raw run logs (\texttt{*.log}) record per-task pass/fail, replay coverage, and gate-rejection events. The \texttt{paper/findings\_summary.md} file in the repo contains the exhaustive per-task tables underlying every aggregate number in this paper.
+
+\textbf{Environments.} AndroidWorld experiments use \texttt{huggingface/android\_world:latest} with the \texttt{/state} endpoint patch volume-mounted from \texttt{android\_server\_patched.py}; OSWorld experiments use \texttt{happysixd/osworld-docker} via the upstream \texttt{DesktopEnv} provider; WebArena uses the canonical shopping\_admin Docker stack. Models: Gemini 3 Flash via Vertex AI for Android CUA; Claude Sonnet 4.6 (\texttt{claude-sonnet-4-6}) via the Anthropic Computer-Use API for OSWorld and WebArena CUA; Claude Sonnet 4.6 for compile and selector reasoning across all platforms (Gemini-compile is enabled by setting \texttt{PREACT\_COMPILE\_PROVIDER=gemini}).
 
 \bibliographystyle{plain}
 \bibliography{references}
