@@ -1,0 +1,196 @@
+{
+  "n_paraphrases": 45,
+  "n_unrelated": 15,
+  "thresholds": [
+    0.4,
+    0.5,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.85
+  ],
+  "results": [
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.4,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 6.666666666666667
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.5,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.6,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.65,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.7,
+      "functional_pct": 86.66666666666667,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 13.333333333333334,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.75,
+      "functional_pct": 84.44444444444444,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 15.555555555555555,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.8,
+      "functional_pct": 80.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 20.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "MiniLM-L6-v2",
+      "threshold": 0.85,
+      "functional_pct": 64.44444444444444,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 35.55555555555556,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.4,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 100.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.5,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 93.33333333333333
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.6,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 20.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.65,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.7,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.75,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.8,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    },
+    {
+      "model": "bge-large-en-v1.5",
+      "threshold": 0.85,
+      "functional_pct": 100.0,
+      "wrong_pct": 0.0,
+      "no_pick_pct": 0.0,
+      "unrelated_false_pick_pct": 0.0
+    }
+  ],
+  "paraphrases_sample": [
+    {
+      "paraphrase": "Use the Audio Recorder app to capture an audio clip and make sure to save it.",
+      "gold_id": "4640e945-592c-4bce-ab49-93e71e372f13",
+      "original": "Record an audio clip using Audio Recorder app and save it."
+    },
+    {
+      "paraphrase": "Can you open the Audio Recorder app, record some audio, and then save the recording?",
+      "gold_id": "4640e945-592c-4bce-ab49-93e71e372f13",
+      "original": "Record an audio clip using Audio Recorder app and save it."
+    },
+    {
+      "paraphrase": "Go ahead and record a clip in the Audio Recorder app, then save the file when you're done.",
+      "gold_id": "4640e945-592c-4bce-ab49-93e71e372f13",
+      "original": "Record an audio clip using Audio Recorder app and save it."
+    },
+    {
+      "paraphrase": "Use the Audio Recorder app to capture an audio clip and make sure to save it.",
+      "gold_id": "097b73c75dde81fa95d3daf8",
+      "original": "Record an audio clip using Audio Recorder app and save it."
+    },
+    {
+      "paraphrase": "Can you open the Audio Recorder app, record some audio, and then save the recording?",
+      "gold_id": "097b73c75dde81fa95d3daf8",
+      "original": "Record an audio clip using Audio Recorder app and save it."
+    },
+    {
+      "paraphrase": "Go ahead and record a clip in the Audio Recorder app, then save the file when you're done.",
+      "gold_id": "097b73c75dde81fa95d3daf8",
+      "original": "Record an audio clip using Audio Recorder app and save it."
+    },
+    {
+      "paraphrase": "Snap a single picture.",
+      "gold_id": "8226acd0-ad10-4ca0-b63d-35109e123e4c",
+      "original": "Take one photo."
+    },
+    {
+      "paraphrase": "Could you take just one photo for me?",
+      "gold_id": "8226acd0-ad10-4ca0-b63d-35109e123e4c",
+      "original": "Take one photo."
+    },
+    {
+      "paraphrase": "I need you to capture one photograph.",
+      "gold_id": "8226acd0-ad10-4ca0-b63d-35109e123e4c",
+      "original": "Take one photo."
+    },
+    {
+      "paraphrase": "Stop the stopwatch for now.",
+      "gold_id": "c1d8744008c4c2128f0e28ac",
+      "original": "Pause the stopwatch."
+    }
+  ]
+}

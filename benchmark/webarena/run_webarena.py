@@ -269,16 +269,29 @@ async def run_system_benchmark(
                 new_pids = post_run1_pids - pre_run1_pids
             except Exception:
                 new_pids = set()
+        gate_rejected = False
         if _gate_on and new_pids:
             verify = await run_task_with_eval(
                 system, task, "replay", auth_states, timeout
             )
             if verify["score"] < 1.0:
+                gate_rejected = True
+                # Delete the new programs from Run 1 AND any programs
+                # added during the verify-replay's CUA recovery, so the
+                # store returns to its exact pre-Run-1 state.
+                try:
+                    post_verify_pids = {
+                        s["program_id"] for s in system._agent.store.list_programs()
+                    }
+                except Exception:
+                    post_verify_pids = set()
+                to_delete = (post_verify_pids - pre_run1_pids)
                 logger.info(
-                    "    [verify-gate] Δreplay-fail: replay_score=%.1f, cov=%.0f%% — deleting %d new program(s)",
-                    verify["score"], verify.get("coverage", 0) * 100, len(new_pids),
+                    "    [verify-gate] Δreplay-fail: replay_score=%.1f, cov=%.0f%% — deleting %d program(s) (run1=%d + verify-recovery=%d)",
+                    verify["score"], verify.get("coverage", 0) * 100,
+                    len(to_delete), len(new_pids), len(to_delete) - len(new_pids),
                 )
-                for pid in new_pids:
+                for pid in to_delete:
                     try:
                         await system._agent.store.delete(pid)
                     except Exception as e:
@@ -289,8 +302,38 @@ async def run_system_benchmark(
                     verify["score"], len(new_pids),
                 )
 
-        # ---- Run 2: Replay ----
-        if not system.has_cached_artifact(task["intent"]):
+        # ---- Run 2: Replay (or cache-miss fallback to fresh CUA) ----
+        # Cache-miss = gate rejected OR no compile happened in Run 1 OR
+        # the store is empty for this task family.
+        _fallback_mode = _os.environ.get(
+            'PREACT_CACHE_MISS_FALLBACK', 'skip'
+        ).lower()
+        cache_miss = gate_rejected or (not system.has_cached_artifact(task["intent"]))
+        if cache_miss:
+            if _fallback_mode == 'cua':
+                # Cache-miss-to-CUA fallback: rather than skip Run 2,
+                # run a fresh CUA exploration (matching Muscle-Mem's
+                # cache-miss semantics). Counts toward warm SR like
+                # an ordinary Run 2.
+                logger.info(
+                    "  [%s] Run 2 (cache-miss CUA fallback): no verified artifact",
+                    tid,
+                )
+                r2 = await run_task_with_eval(
+                    system, task, "exploration", auth_states, timeout
+                )
+                r2["run_type"] = "replay"  # bookkeeping: this counts as warm
+                r2["error"] = r2.get("error") or "fallback_cua"
+                run2_results.append(r2)
+                status = "PASS" if r2["score"] else (
+                    "EXEC" if r2["success"] else "FAIL"
+                )
+                logger.info(
+                    "    %s (fallback): %.0fms, %d tok, %d actions, score=%.1f",
+                    status, r2["time_ms"], r2["tokens"], r2["actions"],
+                    r2["score"],
+                )
+                continue
             logger.info("  [%s] Run 2: No artifact — skip", tid)
             run2_results.append({
                 "task_id": tid,
