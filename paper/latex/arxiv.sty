@@ -1,83 +1,155 @@
-% arxiv.sty — clean arxiv-style preprint formatting
-% Lightweight equivalent of the popular arxiv-style template (Kour et al.).
-% Provides title block, sectional formatting, abstract environment, and
-% paragraph spacing suitable for an arXiv preprint.
-
+% arxiv.sty — a clean, professional single-column preprint style.
+% Hand-authored for this paper (not derived from any third-party template).
+% Aesthetic: Palatino body + matching math, Helvetica-clone sans-serif
+% headings, a refined centered title block, and a slim ruled running header.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{arxiv}[2026/04/27 v0.1 arXiv preprint style]
+\ProvidesPackage{arxiv}[2026/06/15 Clean professional preprint style]
 
-% --- Page geometry ---
-\RequirePackage[a4paper,margin=1in]{geometry}
+% --- Page geometry: generous, readable single column ------------------------
+\RequirePackage[letterpaper,top=1in,bottom=1in,left=1.15in,right=1.15in,headheight=14pt]{geometry}
 
-% --- Fonts and microtype for nicer text ---
-\RequirePackage{lmodern}
+% --- Encoding ---------------------------------------------------------------
 \RequirePackage[T1]{fontenc}
 \RequirePackage[utf8]{inputenc}
-\RequirePackage{microtype}
 
-% --- Math and tables ---
+% --- Fonts: Palatino text + math, Helvetica sans for headings ---------------
+\RequirePackage{mathpazo}             % Palatino + matching math
+\RequirePackage[scaled=0.90]{helvet}  % sans family for headings/labels
+\RequirePackage{microtype}
+\linespread{1.05}                     % a touch more leading suits Palatino
+
+% --- Math and tables --------------------------------------------------------
 \RequirePackage{amsmath,amsfonts,amssymb}
 \RequirePackage{booktabs}
 \RequirePackage{array}
 \RequirePackage{multirow}
-
-% --- Lists, captions, hyperlinks ---
 \RequirePackage{enumitem}
-\RequirePackage[font=small,labelfont=bf]{caption}
+
+% --- Color palette ----------------------------------------------------------
 \RequirePackage{xcolor}
-\definecolor{linkcolor}{rgb}{0.10,0.30,0.65}
-\RequirePackage[colorlinks=true,
-                linkcolor=linkcolor,
-                citecolor=linkcolor,
-                urlcolor=linkcolor]{hyperref}
+\definecolor{arxivink}{HTML}{1A1A2E}     % near-black headings
+\definecolor{arxivaccent}{HTML}{34507F}  % muted slate-blue (links, header)
+\definecolor{arxivrule}{HTML}{C2C8D6}    % light rule
 
-% --- Section formatting ---
+% --- Section headings: sans-serif, bold -------------------------------------
 \RequirePackage{titlesec}
-\titleformat{\section}{\Large\bfseries}{\thesection}{0.7em}{}
-\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
-\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.5em}{}
+\titleformat{\section}
+  {\color{arxivink}\sffamily\large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}
+  {\color{arxivink}\sffamily\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}
+  {\color{arxivink}\sffamily\normalsize\bfseries\itshape}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{1.5\baselineskip}{0.5\baselineskip}
+\titlespacing*{\subsection}{0pt}{1.0\baselineskip}{0.35\baselineskip}
+\titlespacing*{\subsubsection}{0pt}{0.8\baselineskip}{0.3\baselineskip}
 
-% --- Title block ---
+% --- Captions ---------------------------------------------------------------
+\RequirePackage[font=small,labelfont={bf,sf},labelsep=period]{caption}
+
+% --- Floats: keep figures/tables next to their text, avoid float-only pages --
+\RequirePackage{float}             % enables the [H] "place exactly here" specifier
+\setlength{\textfloatsep}{12pt plus 3pt minus 3pt}
+\setlength{\intextsep}{12pt plus 3pt minus 3pt}
+\setlength{\floatsep}{10pt plus 2pt minus 2pt}
+% Discourage LaTeX from deferring floats onto their own pages.
+\renewcommand{\topfraction}{0.92}
+\renewcommand{\bottomfraction}{0.85}
+\renewcommand{\textfraction}{0.06}
+\renewcommand{\floatpagefraction}{0.80}
+\setcounter{topnumber}{4}
+\setcounter{bottomnumber}{3}
+\setcounter{totalnumber}{8}
+
+% --- Running header / footer ------------------------------------------------
+\RequirePackage{fancyhdr}
+\newcommand{\@runningtitle}{}
+\newcommand{\runningtitle}[1]{\renewcommand{\@runningtitle}{#1}}
+\fancypagestyle{arxivstyle}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \renewcommand{\headrule}{{\color{arxivrule}\hrule height \headrulewidth}}%
+  \fancyhead[L]{\footnotesize\sffamily\color{arxivaccent}\@runningtitle}%
+  \fancyhead[R]{\footnotesize\sffamily\color{arxivaccent}\thepage}%
+}
+\pagestyle{arxivstyle}
+% First page: no header rule, page number centered at the foot.
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \fancyfoot[C]{\footnotesize\sffamily\color{arxivaccent}\thepage}%
+}
+
+% --- Title block ------------------------------------------------------------
 \renewcommand{\maketitle}{%
-  \begingroup
-    \begin{center}
-      {\LARGE \bfseries \@title \par}\vspace{1em}
-      {\large \@author \par}\vspace{0.5em}
-      {\small \@date \par}
-    \end{center}
-    \vspace{1em}
-  \endgroup
+  \thispagestyle{plain}%
+  \begin{center}%
+    {\color{arxivink}\bfseries\fontsize{20}{24}\selectfont \@title\par}%
+    \vskip 1.1em%
+    {\large\@author\par}%
+    \ifx\@date\@empty\else\vskip 0.5em{\small\@date\par}\fi%
+  \end{center}%
+  \vskip 0.7em%
+  {\color{arxivrule}\hrule height 0.8pt}%
+  \vskip 1.5em%
 }
 
-% --- Abstract environment ---
+% --- Abstract: centred heading, narrower measure, ruled-off ------------------
 \renewenvironment{abstract}{%
-  \begin{center}{\bfseries Abstract}\end{center}
-  \begin{quote}\small
+  \begin{center}{\sffamily\bfseries\color{arxivink}\normalsize Abstract}\end{center}%
+  \vspace{-0.2em}%
+  \begin{list}{}{%
+    \setlength{\leftmargin}{0.45in}\setlength{\rightmargin}{0.45in}%
+  }\item\relax\small\noindent\ignorespaces%
 }{%
-  \end{quote}\vspace{0.5em}
+  \end{list}%
+  \vskip 0.9em{\color{arxivrule}\hrule height 0.4pt}\vskip 1.2em%
 }
 
-% --- Paragraph spacing ---
-\setlength{\parskip}{0.4em}
-\setlength{\parindent}{1.2em}
-
-% --- Algorithm pseudocode ---
+% --- Algorithm pseudocode ---------------------------------------------------
 \RequirePackage{algorithm}
 \RequirePackage{algpseudocode}
 
-% --- TikZ for architecture diagrams ---
+% --- TikZ for architecture diagrams -----------------------------------------
 \RequirePackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
 
-% --- Code listings ---
+% --- Code listings ----------------------------------------------------------
 \RequirePackage{listings}
+\definecolor{lstbg}{HTML}{F4F6FA}
+\definecolor{lstkw}{HTML}{34507F}
+\definecolor{lstcm}{HTML}{5A6478}
 \lstset{
   basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{lstkw}\bfseries,
+  commentstyle=\color{lstcm}\itshape,
+  stringstyle=\color{arxivink},
+  backgroundcolor=\color{lstbg},
   breaklines=true,
   showstringspaces=false,
   columns=fullflexible,
   keepspaces=true,
+  frame=single,
+  rulecolor=\color{arxivrule},
+  framesep=5pt,
+  xleftmargin=6pt,
+  xrightmargin=2pt,
 }
 
-% --- Tightlist for nice itemize ---
+% --- Hyperlinks (loaded late, coloured to match the palette) ----------------
+\RequirePackage[colorlinks=true,
+                linkcolor=arxivaccent,
+                citecolor=arxivaccent,
+                urlcolor=arxivaccent,
+                filecolor=arxivaccent,
+                breaklinks=true,
+                pdfborder={0 0 0}]{hyperref}
+
+% --- Tightlist for nice itemize ---------------------------------------------
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+% --- Paragraph spacing ------------------------------------------------------
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{1.2em}
+
+% Absorb the occasional over-long monospace token / URL without visible harm.
+\setlength{\emergencystretch}{3em}
