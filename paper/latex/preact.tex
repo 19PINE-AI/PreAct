@@ -81,6 +81,13 @@ ActionEngine & State machine via crawl & Flat-Python generated & None & Re-crawl
 \end{tabular}
 \end{table}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.66\linewidth]{fig_landscape.pdf}
+\caption{Where PreAct sits. Prior systems either store directly-runnable artifacts \emph{or} refine what they store, but not both, and none verifies a stored artifact against an independent evaluator. PreAct occupies the upper-right: a verified, self-extending corpus of directly-executable programs. Axes are qualitative.}
+\label{fig:landscape}
+\end{figure}
+
 \textbf{The artifact is the runtime.} The commitment that distinguishes PreAct is the second column (\emph{the SM is the runtime}) combined with the fourth (\emph{recompile under verify-gate}). ActionEngine builds a state machine but emits flat Python from it; the state machine is consumed at compile time and the runtime is the generated script. PreAct executes the state machine directly: each state's verification predicate is evaluated against the live UI, and each transition is dispatched to the underlying action backend (XPath click, JSON action, etc.). This direct execution enables (a) per-state verification and graceful fallback, (b) in-place patching when a transition fails, and (c) the verify-before-store gate (which we will argue is empirically necessary for monotonicity).
 
 \textbf{What grows with experience.} The deeper distinction concerns \emph{what grows} as the agent gains experience. In Muscle-Mem, AgentRR, and Workflow-Use, the cache or experience store is append-only: every captured trajectory adds a new entry without affecting the existing ones. In ActionEngine, the state machine is built once via crawling and the flat Python is regenerated wholesale on each rebuild; there is no notion of incremental refinement. PreAct's compile-extend-replace loop, by contrast, allows the corpus to \emph{mutate}: a fresh compile with the same dedup signature replaces an older program if it passes the verify-gate. The corpus does not just accumulate---it refines its representation of repeated tasks as the agent encounters them across different parameter values, environments, and sessions. This is the property we mean by ``self-extending executable code corpus'' (\S\ref{sec:intro}): not an append-only cache, but a mutable, verified, directly-executable code library.
@@ -107,6 +114,13 @@ transitions
   form_filled   --tap("Save")----------------->  saved      (+ phone, label steps)
 \end{lstlisting}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{fig_program_graph.pdf}
+\caption{The compiled ``add a contact'' program as a graph: states (boxes) hold a verification predicate that must match the live screen; transitions (arrows) hold an action. The harness executes this graph directly. Listing~\ref{lst:contact} is the same program in stored JSON form.}
+\label{fig:program-graph}
+\end{figure}
+
 Formally a program is a tuple $P=(S,T,M,V)$: states $S$ (id, description, verification predicate), transitions $T$ (each $(s_i, s_j, a)$ firing action $a$ to move from $s_i$ to $s_j$), metadata $M$ (task description, app context, parameter schema, and a \emph{dedup signature} that identifies which task family the program serves), and data-extraction predicates $V$ for question-answering tasks (e.g.\ \texttt{inspect\_text}). The full action vocabulary is in Appendix~B. This graph form buys three things a flat script cannot: \textbf{(1)} per-state verification, so the agent knows immediately when an action did not have the intended effect; \textbf{(2)} branching, since one state can have several outgoing transitions chosen by predicate (a delete-confirmation dialog that appears only on some app versions); and \textbf{(3)} in-place extension, since a new state and transition can be spliced in without regenerating the whole program.
 
 \subsection{The loop: select, replay, fall back, verify}
@@ -129,6 +143,13 @@ Figure~\ref{fig:arch} shows how the harness uses such programs. For a goal $T$:
 \end{enumerate}
 
 The static harness code defines this loop; the corpus is what grows, and step~4's gate is what lets it grow \emph{monotonically} rather than accumulate programs that run but do not work. Algorithm~\ref{alg:harness} makes the loop precise.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{fig_daytimeline.pdf}
+\caption{Where the cost goes. The first time PreAct sees a task it runs the full agent (top: $\approx N$ rounds of observe--reason--act) and pays a one-time compile-and-verify premium. Every later run replays the stored program (bottom): no language-model calls, an order of magnitude faster, and already verified before it was stored.}
+\label{fig:daytimeline}
+\end{figure}
 
 \begin{algorithm}[t]
 \caption{PreAct verified compile-extend-replace loop}
@@ -164,6 +185,13 @@ Three properties of Algorithm~\ref{alg:harness} are worth highlighting. First, \
 The gate is the mechanism that separates PreAct from a blind cache. When the agent succeeds and the trace is compiled into a candidate $P'$, the harness does \emph{not} trust it. It resets the environment to the task's clean initial state, replays $P'$ there, and asks the benchmark's own evaluator whether the task is solved. $P'$ is stored only if \emph{both} hold: the replay ran to its terminal state without error (\texttt{replay\_ok}) \emph{and} the evaluator scores it a pass (\texttt{score}~$\geq 1.0$).
 
 Both halves earn their place. A single \texttt{score}~$\geq 1.0$ check lets through programs whose actions silently no-op (a malformed action the backend swallows) while the environment happens to still hold passing state from an earlier step---so we additionally require the replay to report its own success. The converse and more important failure mode is \texttt{replay\_ok} \emph{with} \texttt{score}~$=0$: the program executes every action to completion (100\% coverage) yet the end state does not satisfy the evaluator---the contact form was filled and ``Save'' was tapped, but a stale field meant no contact was written. We call this the \textbf{cov$=$100\%/score$=$0 lossy replay}, and \S\ref{sec:eval-gate} shows it is exactly what the gate must catch.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{fig_gate_flow.pdf}
+\caption{The verify-before-store gate. A freshly compiled program is re-run from a clean state and re-scored by an independent evaluator; it enters the corpus only if it both replays cleanly \emph{and} passes. This is what rejects the ``runs but doesn't work'' programs---the ones that replay to full coverage yet leave the task unsolved.}
+\label{fig:gate-flow}
+\end{figure}
 
 \subsection{Selector and fallback}
 \label{sec:arch-selector}
@@ -201,7 +229,14 @@ The basic promise is that the second time the agent sees a task, it is faster an
 \label{fig:monotonic}
 \end{figure}
 
-\textbf{The speedup is real.} A replayed program carries no per-step language-model call, so warm runs are dramatically cheaper: on WebArena, served replays complete at $8.5$--$13\times$ lower cost than the corresponding fresh-agent solve (Figure~\ref{fig:rerun}), and on Android a warm task that hits the corpus finishes in seconds. The one-time price is the compile-and-verify step, which costs roughly as much as one more solve ($+162\%$ wall time on Android, $+217\%$ on OSWorld per stored program; Appendix~F); it is repaid the first time the task recurs.
+\textbf{The speedup is real.} A replayed program carries no per-step language-model call, so warm runs are dramatically cheaper: on WebArena, served replays complete at $8.5$--$13\times$ lower cost than the corresponding fresh-agent solve (Figure~\ref{fig:rerun}), and on Android a warm task that hits the corpus finishes in seconds. The one-time price is the compile-and-verify step, which costs roughly as much as one more solve ($+162\%$ wall time on Android, $+217\%$ on OSWorld per stored program; Figure~\ref{fig:gatecost}); it is repaid the first time the task recurs.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.46\linewidth]{fig_gatecost.pdf}
+\caption{The gate's one-time cost. Verifying a freshly compiled program (re-running it from a clean state) costs about as much as the original solve---more on OSWorld, where both the solve and the verify-replay are slowest. This is paid once per stored program and amortized over every warm run.}
+\label{fig:gatecost}
+\end{figure}
 
 \textbf{The result is not model-specific.} Swapping Gemini 3 Flash for Claude Sonnet 4.6 on the same subset gives the same $73.3\%$ (11/15) and---tellingly---the \emph{same} three stable failures (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) across both models and all three seeds. These three are properties of the benchmark's UI (a canvas not exposed in the accessibility tree; a brightness slider that rejects scroll; a stale status-bar Wi-Fi icon), not of the agent's reasoning---they bound the benchmark, not the method (\S\ref{sec:disc-harness-det}).
 
@@ -311,6 +346,13 @@ This is a small-but-real \emph{positive} finding for the architecture: PreAct's 
 
 To probe whether the verify-gate's compile-rejection rate is Claude-specific or a property of the compile step itself, we wired \texttt{PREACT\_COMPILE\_PROVIDER=gemini}, which swaps the compile-step LLM from Claude Sonnet 4.6 to Gemini 3 Flash (the CUA loop and selector remain Claude). We ran $n{=}3$ WebArena reps on the same 12-task shopping\_admin subset (gate-ON, no cache-miss fallback, for clean comparison with the Claude-compile baseline in \S\ref{sec:eval-webarena}).
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{fig_compile_llm.pdf}
+\caption{The gate is mechanism-driven, not Claude-specific. Swapping the compile-step model from Claude to Gemini 3 Flash leaves the gate-rejection rate in the same band ($83\%$ vs.\ $89\%$); warm success rate depends only on what survives the gate.}
+\label{fig:compile-llm}
+\end{figure}
+
 \begin{table}[t]
 \centering
 \caption{Compile-LLM robustness: gate behavior under Claude vs Gemini compile, WebArena 12-task shopping\_admin gate-ON (no cache-miss fallback).}
@@ -387,6 +429,13 @@ Three AndroidWorld tasks (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) an
 \label{sec:eval-ood}
 
 We tested whether the corpus transfers beyond seen tasks by running a test\_tiny-built rag\_db on the 33 non-test\_tiny tasks of OSWorld test\_small at $n{=}3$ reps (with the rag\_db copy reset between reps). Per-rep SR over the 30 OOD tasks that complete setup: $21/30$, $15/30$, $14/30$, giving a warm-OOD mean of $16.7/30 = 56\% \pm 12\%$. The cold-OOD baseline on the same task subset is a single ($n{=}1$) pass at $\approx 20/30 = 67\%$; because it is unpaired and not multi-rep, the gap below should be read as indicative rather than a tightly-estimated effect. \textbf{The corpus does not transfer; at $n{=}3$ the warm-OOD mean is $\approx 11$ percentage points \emph{below} this cold-OOD pass}, a small-but-real headwind rather than the neutral outcome a single pass had suggested. Inspection of the rep logs shows the selector occasionally retrieves a near-miss program (a Chrome task's program retrieved for a Thunderbird task whose description shares the words ``open'' and ``message''), and the brittle XPath/state predicates from the source domain fail on the OOD page, costing replay budget without recovering via CUA fast enough. The selector's no-pick rate on OOD queries does buffer this somewhat---it returns ``no candidate'' on the majority of cross-family queries---but the queries it does pick are penalised. This sharpens the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is concentrated in repeated invocations of seen tasks, and corpora built on small task subsets actively work against out-of-distribution generalization on this evaluator}. Full per-domain breakdown in Appendix~E.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.50\linewidth]{fig_ood.pdf}
+\caption{The corpus does not transfer cleanly. A corpus built on six OSWorld tasks, applied to 30 unseen tasks, lands $\approx 11$ points \emph{below} the cold baseline: a few mis-routed retrievals fire brittle predicates and burn replay budget. The corpus's value is concentrated in repeated invocations of seen tasks.}
+\label{fig:ood}
+\end{figure}
 
 \subsection{Limitations}
 
@@ -623,6 +672,13 @@ The corpus does not transfer cleanly across task families. Inspecting the rep lo
 
 \textbf{(L4) Compile-fidelity rate.} A separate audit of stored programs across platforms (Android: 58 programs; OSWorld: 16; WebArena: 7) found two recurring compile-fidelity risk patterns: missing \texttt{navigate\_back} on nav-heavy edit/delete tasks (affecting roughly 28\% of Android programs), and dynamic \texttt{inspect\_text}/\texttt{inspect\_screenshot} returns on pages whose state evolves between Run~1 and replay (100\% of audited WebArena programs use \texttt{inspect\_screenshot}, fully explaining the 48/48 smoking-gun rate observed under gate-OFF). The compiler itself is an LLM that produces lossy state-machines on a non-trivial fraction of inputs. The verify-gate filters this at storage time, but as the corpus scales, the gate's verify-replay cost (proportional to compile attempts, not just stored programs) may become a bottleneck.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.78\linewidth]{fig_compile_audit.pdf}
+\caption{Compile-fidelity audit of the 58-program Android corpus. Roughly a quarter (16 programs) are lossy-risk---nav-heavy edit/move/delete tasks missing a \texttt{navigate\_back}---which is the rate the gate must catch. Manual inter-classifier agreement was 5/5 per bucket.}
+\label{fig:compile-audit}
+\end{figure}
+
 \textbf{(L5) LLM nondeterminism in selector.} The agentic Program Selector is itself an LLM call. We measured selector exact-id-match accuracy of 22/30 = 73\% on the rag\_db's stored programs, prompted with each program's own task description verbatim. Inspecting the 8 misses, all were picks of \emph{semantically equivalent} programs (same \texttt{task\_description}, different \texttt{program\_id} from accumulated reps under different dedup signatures). Functional accuracy (correct task family selected) is therefore close to 100\%, with the 73\% exact-id figure reflecting the corpus's accumulation of multiple matches per task.
 
 To stress-test the selector beyond verbatim retrieval, we ran a paraphrase-robustness audit: for each of 15 stored Android programs, we generated 3 LLM-rewritten paraphrases (45 paraphrased queries total) and measured whether the selector still picked the original program. Result: 21/45 = 47\% exact-id, 13/45 = 29\% same-task-different-id (paraphrase picked an equivalent program), 11/45 = 24\% no-pick (selector returned ``no candidate''), and \textbf{0/45 = 0\% wrong-task-family} (selector never picked an unrelated program). \emph{Functional accuracy} (exact + equivalent) is 75.6\% (34/45); the no-pick fraction is conservative behavior (the selector errs toward CUA fallback rather than retrieving an inapplicable program). At 75.6\% functional retrieval and 0\% mis-retrieval, the selector is conservative-by-design rather than over-eager.
@@ -659,6 +715,13 @@ Embedding bge-large-en-v1.5 & 0.60 & 100\% (45/45) & 0\% & 20.0\% \\
 
 The interpretation: the hypothesis we entered with---``embedding-RAG is inferior because discrimination is a reasoning problem''---does not survive. With either backbone tuned to its safe operating point, embedding retrieval matches or beats the agentic selector at zero wrong-task and zero false-pick; bge-large holds $100\%$ over a wider $\tau$ window ($0.65$--$0.85$) than MiniLM ($0.50$--$0.65$), which matters as the corpus grows and intra-cluster similarity rises. We retain the agentic selector only for its interpretable logs and tuning-free operation, and flag that selectors should be re-tested at $10^3{+}$ programs where these properties become consequential.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.46\linewidth]{fig_guardrails.pdf}
+\caption{Runtime guardrails are aggregate-neutral. Cold means are identical with and without guardrails ($10.2 = 10.2$); the warm gap ($+0.4$) is well within seed variance. Detail in Table~\ref{tab:guardrails}.}
+\label{fig:guardrails}
+\end{figure}
+
 \begin{table}[h]
 \centering
 \caption{Code-level guardrails ablation, AndroidWorld official-15, $n{=}5$. Cold means are \emph{identical} ($10.2 = 10.2$). Warm $\Delta$ = $+0.4$ is well within the standard deviations on each side.}
@@ -677,6 +740,13 @@ Seed & Cold ON & Warm ON & $\Delta$ ON & Cold OFF & Warm OFF & $\Delta$ OFF \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.45\linewidth]{fig_arch_ab.pdf}
+\caption{State-machine vs.\ flat-script runtime (warm SR, AndroidWorld official-15). The verified graph form helps by a small, consistent margin ($+0.67$ tasks, all three matched seeds non-regressive, $p=0.125$)---real but far smaller than the gate's $1.75$--$2.6$ tasks.}
+\label{fig:arch-ab}
+\end{figure}
 
 \begin{table}[h]
 \centering
