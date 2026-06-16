@@ -126,10 +126,11 @@ def fig_landscape():
     ax.set_facecolor(PANEL)
     ax.set_xlim(0, 10); ax.set_ylim(0, 10)
     ax.axhline(5, color=GRID, lw=1.0); ax.axvline(5, color=GRID, lw=1.0)
-    ax.text(9.85, 0.15, "self-extends / refines its store $\\rightarrow$",
-            ha="right", fontsize=8.5, color=GRAY)
-    ax.text(0.15, 9.85, "artifact runs without an LLM $\\rightarrow$",
-            ha="left", va="top", fontsize=8.5, color=GRAY, rotation=90)
+    ax.text(9.85, 0.18, "self-extends / refines its store $\\rightarrow$",
+            ha="right", fontsize=11.5, color=INK, fontweight="bold")
+    ax.text(0.18, 9.85, "artifact runs without an LLM $\\rightarrow$",
+            ha="left", va="top", fontsize=11.5, color=INK, fontweight="bold",
+            rotation=90)
     # shaded top-right region (PreAct's combination)
     ax.add_patch(Rectangle((5, 5), 5, 5, color=ACCENT, alpha=0.06, zorder=0))
     #            name                 x    y   ldx   ldy  ha       color
@@ -142,7 +143,7 @@ def fig_landscape():
         ("memory systems\n(Mem0, A-MEM)", 5.6, 4.0, 0.0, -0.5, "center", GRAY),
         ("Voyager",             8.8, 3.4, 0.0, -0.55, "center", GRAY),
         ("TroVE",               7.1, 2.3, 0.0, -0.55, "center", GRAY),
-        ("ExpeL",               8.7, 1.2, 0.0, -0.55, "center", GRAY),
+        ("ExpeL",               8.7, 2.0, 0.0, -0.55, "center", GRAY),
         ("PreAct",              8.5, 8.5, 0.0, -0.7,  "center", ACCENT),
     ]
     for name, x, y, ldx, ldy, lha, col in pts:
@@ -259,9 +260,6 @@ def fig_architecture():
     arrow(ax, (4.1, 5.3), (4.1, TOP + H), color=ACCENT)
     ax.text(9.0, fy + 0.12, "retrieve on next invocation", ha="center",
             fontsize=8, color=ACCENT)
-    ax.text(7.5, 0.35, "The corpus is the only growing structure; the harness "
-            "code is fixed.", ha="center", fontsize=8.5, color=GRAY,
-            style="italic")
     save(fig, "fig_architecture")
 
 
