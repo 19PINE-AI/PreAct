@@ -98,26 +98,45 @@ ActionEngine & State machine via crawl & Flat-Python generated & None & Re-crawl
 \subsection{What the agent stores: a state-machine program}
 \label{sec:arch-program}
 
-We start from the artifact, because in PreAct the artifact \emph{is} the runtime. When the agent first succeeds at ``add Jordan Chen,'' PreAct compiles the trace into the program sketched in Listing~\ref{lst:contact} (the full JSON is in Appendix~A). It is a small graph: \emph{states} carry a verification predicate---an accessibility-tree pattern that must hold on the live screen for the agent to believe it is in that state---and \emph{transitions} carry an action. Input values seen in the trace that match the task description (the name, the phone number) are lifted to \emph{parameters} (\texttt{\$first}, \texttt{\$phone}, \dots), so the one program serves every future ``add a contact'' request.
+We start from the artifact, because in PreAct the artifact \emph{is} the runtime. Listing~\ref{lst:contact} is an \emph{actual} program from the corpus---the one compiled the first time the agent added a contact (the trace happened to be for ``Emilia Gonzalez''). It is a small graph, drawn in Figure~\ref{fig:program-graph}: each \emph{state} carries a verification predicate (an accessibility-tree pattern that must hold on the live screen for the agent to believe it is in that state) and each \emph{transition} carries an action. The concrete values typed during the trace are lifted to \emph{parameters}---here \texttt{first\_name}, \texttt{last\_name}, \texttt{phone\_number}, listed in the metadata---so this single program serves every future ``add a contact'' request, including ``add Jordan Chen,'' by binding the parameters to new values.
 
-\begin{lstlisting}[caption={A compiled program for ``add a contact'' (abbreviated). States carry verification predicates ($\models$); transitions carry actions. This graph is executed directly---it is not regenerated into a flat script.},label={lst:contact},captionpos=b,basicstyle=\ttfamily\footnotesize,language={}]
-states                                          parameters: $first $last $phone $label
-  home          |= launcher visible
-  contacts_main |= package == com.android.contacts
-  form_open     |= element resource_id == name_field
-  form_filled   |= text == "$first $last"
-  saved         |= (terminal)
-transitions
-  home          --open_app("Contacts")-------->  contacts_main
-  contacts_main --tap("Create new contact")---->  form_open
-  form_open     --type("$first $last")--------->  form_filled
-  form_filled   --tap("Save")----------------->  saved      (+ phone, label steps)
+\begin{lstlisting}[caption={The actual compiled program for ``add a contact,'' taken from the corpus (program \texttt{ab4390a9}). It is stored as JSON; here, schema-default \texttt{null} fields, per-state natural-language descriptions, and long resource-id package prefixes ($\ldots$) are elided for space---the verbatim record is in Appendix~A. Figure~\ref{fig:program-graph} draws the same program.},label={lst:contact},captionpos=b,basicstyle=\ttfamily\scriptsize,language={}]
+{
+  "metadata": {
+    "task_description": "Create a new contact for Emilia Gonzalez. ...",
+    "application_context": "com.google.android.contacts",
+    "parameters": ["first_name", "last_name", "phone_number"]
+  },
+  "states": [
+    { "id": "contacts_app_open",   "verification": {"type":"expect_element", "xpath":"resource_id=....:id/floating_action_button"} },
+    { "id": "create_contact_form", "verification": {"type":"expect_element", "xpath":"class=android.widget.EditText&&hint=First name"} },
+    { "id": "first_name_entered",  "verification": {"type":"expect_element", "xpath":"class=android.widget.EditText&&hint=Last name"} },
+    { "id": "last_name_entered",   "verification": {"type":"expect_element", "xpath":"class=android.widget.EditText&&hint=Phone"} },
+    { "id": "phone_entered",       "verification": {"type":"expect_element", "xpath":"resource_id=android:id/text1&&text=Mobile"} },
+    { "id": "phone_type_selected", "verification": {"type":"expect_element", "xpath":"...:id/toolbar_button&&text=Save"} },
+    { "id": "contact_saved",       "verification": {"type":"terminal_state"} }
+  ],
+  "transitions": [
+    { "from_state":"contacts_app_open",   "to_state":"create_contact_form",
+      "action": {"type":"action_click", "target":"resource_id=....:id/floating_action_button"} },
+    { "from_state":"create_contact_form", "to_state":"first_name_entered",
+      "action": {"type":"action_type", "parameter_name":"first_name",   "target":"...hint=First name"} },
+    { "from_state":"first_name_entered",  "to_state":"last_name_entered",
+      "action": {"type":"action_type", "parameter_name":"last_name",    "target":"...hint=Last name"} },
+    { "from_state":"last_name_entered",   "to_state":"phone_entered",
+      "action": {"type":"action_type", "parameter_name":"phone_number", "target":"...hint=Phone"} },
+    { "from_state":"phone_entered",       "to_state":"phone_type_selected",
+      "action": {"type":"action_click", "target":"...text=Mobile"} },
+    { "from_state":"phone_type_selected", "to_state":"contact_saved",
+      "action": {"type":"action_click", "target":"...text=Save"} }
+  ]
+}
 \end{lstlisting}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.95\linewidth]{fig_program_graph.pdf}
-\caption{The compiled ``add a contact'' program as a graph: states (boxes) hold a verification predicate that must match the live screen; transitions (arrows) hold an action. The harness executes this graph directly. Listing~\ref{lst:contact} is the same program in stored JSON form.}
+\includegraphics[width=0.5\linewidth]{fig_program_graph.pdf}
+\caption{The compiled ``add a contact'' program of Listing~\ref{lst:contact} drawn as a state machine: each box is a state holding a verification predicate ($\models$) that must match the live screen; each arrow is a transition holding an action. The harness executes this graph directly---it is not regenerated into a flat script.}
 \label{fig:program-graph}
 \end{figure}
 
@@ -482,45 +501,59 @@ A closing thought. The agents in this paper get faster not by thinking faster bu
 \section*{Appendix A. Concrete Program Example}
 \label{sec:program}
 
-To make the state-machine representation concrete, we present a compiled program for the AndroidWorld \texttt{ContactsNewContactDraft} task (parameters: first name, last name, phone number, phone label).
+This is the verbatim program behind Listing~\ref{lst:contact} and Figure~\ref{fig:program-graph}, taken directly from the corpus (program \texttt{ab4390a9}, compiled from the AndroidWorld contact-creation task). Only the schema-default \texttt{null} fields of each action object are omitted; everything else---state ids, verification predicates with their timeouts, per-state descriptions, and the full resource-id selectors---is reproduced exactly.
 
 \begin{lstlisting}[basicstyle=\ttfamily\scriptsize,language={}]
 {
   "metadata": {
-    "task_description": "Go to the new contact screen and enter the following details",
+    "program_id": "ab4390a9-1902-47a1-821b-ebddc7f4010a",
+    "task_description": "Create a new contact for Emilia Gonzalez. Their number is +14240925675.",
     "application_context": "com.google.android.contacts",
-    "parameters": ["first_name", "last_name", "phone_number", "phone_label"],
-    "dedup_signature": "contacts_new_draft_4param"
+    "parameters": ["first_name", "last_name", "phone_number"]
   },
   "states": [
-    {"id": "home", "verification": {"type": "expect_element", "xpath": "resource_id=...launcher", "timeout_ms": 3000}},
-    {"id": "contacts_main", "verification": {"type": "expect_element", "xpath": "package=com.google.android.contacts", "timeout_ms": 5000}},
-    {"id": "new_contact_form", "verification": {"type": "expect_element", "xpath": "resource_id=name_field", "timeout_ms": 3000}},
-    {"id": "form_filled", "verification": {"type": "expect_element", "xpath": "text=$first_name $last_name", "timeout_ms": 2000}},
-    {"id": "draft_saved", "verification": {"type": "terminal_state"}}
+    { "id": "contacts_app_open",
+      "verification": {"type": "expect_element", "xpath": "resource_id=com.google.android.contacts:id/floating_action_button", "timeout_ms": 5000},
+      "description": "Contacts app is open showing the main list with the Create-Contact FAB visible" },
+    { "id": "create_contact_form",
+      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=First name", "timeout_ms": 3000},
+      "description": "New-contact creation form is open with the First name field visible" },
+    { "id": "first_name_entered",
+      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=Last name", "timeout_ms": 2000},
+      "description": "First name has been entered; Last name field is available" },
+    { "id": "last_name_entered",
+      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=Phone", "timeout_ms": 2000},
+      "description": "Last name has been entered; Phone field is available" },
+    { "id": "phone_entered",
+      "verification": {"type": "expect_element", "xpath": "resource_id=android:id/text1&&text=Mobile", "timeout_ms": 2000},
+      "description": "Phone number has been entered; phone-type selector (Mobile) is visible" },
+    { "id": "phone_type_selected",
+      "verification": {"type": "expect_element", "xpath": "resource_id=com.google.android.contacts:id/toolbar_button&&text=Save", "timeout_ms": 2000},
+      "description": "Phone type Mobile selected; Save button is visible in the toolbar" },
+    { "id": "contact_saved",
+      "verification": {"type": "terminal_state", "timeout_ms": 5000},
+      "description": "Contact has been saved successfully and the task is complete" }
   ],
   "transitions": [
-    {"from": "home", "to": "contacts_main",
-     "action": {"type": "open_app", "app_name": "Contacts",
-                "description": "open the Contacts app"}},
-    {"from": "contacts_main", "to": "new_contact_form",
-     "action": {"type": "action_click", "target": "content_desc=Create new contact",
-                "description": "tap the Create new contact button"}},
-    {"from": "new_contact_form", "to": "form_filled",
-     "action": {"type": "input_text", "text": "$first_name $last_name", "index": 1,
-                "description": "type the contact's first and last name (parameters)"}},
-    /* ... three more transitions for phone number, label, save ... */
-    {"from": "form_filled", "to": "draft_saved",
-     "action": {"type": "action_click", "target": "content_desc=Save",
-                "description": "tap Save to commit the new contact draft"}}
-  ],
-  "human_interventions": []
+    { "from_state": "contacts_app_open", "to_state": "create_contact_form",
+      "action": {"type": "action_navigate", "text": "Contacts"} },
+    { "from_state": "contacts_app_open", "to_state": "create_contact_form",
+      "action": {"type": "action_click", "target": "resource_id=com.google.android.contacts:id/floating_action_button"} },
+    { "from_state": "create_contact_form", "to_state": "first_name_entered",
+      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=First name", "parameter_name": "first_name"} },
+    { "from_state": "first_name_entered", "to_state": "last_name_entered",
+      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=Last name", "parameter_name": "last_name"} },
+    { "from_state": "last_name_entered", "to_state": "phone_entered",
+      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=Phone", "parameter_name": "phone_number"} },
+    { "from_state": "phone_entered", "to_state": "phone_type_selected",
+      "action": {"type": "action_click", "target": "resource_id=android:id/text1&&text=Mobile"} },
+    { "from_state": "phone_type_selected", "to_state": "contact_saved",
+      "action": {"type": "action_click", "target": "resource_id=com.google.android.contacts:id/toolbar_button&&text=Save"} }
+  ]
 }
 \end{lstlisting}
 
-The verification predicate of each state is an XPath/accessibility-tree pattern that must hold on the live UI; replay halts and falls through to CUA if a predicate fails. Parameters (\$first\_name, \$phone\_number, etc.) are inferred at compile time from the live trace: any input text that matches a task-description placeholder is parameterized so the program generalizes across instances. Every transition carries a one-sentence \texttt{description} field that the selector reads when judging whether the program applies to a new task.
-
-The state graph here is tree-like, but more complex tasks (delete-confirmation dialogs, navigation that branches on app version) compile into graphs with multiple outgoing transitions per state, where the state's verification predicate selects which branch is active.
+Each state's verification predicate is an accessibility-tree pattern that must hold on the live UI; replay halts and falls through to CUA if a predicate fails. The three values typed during the trace are recorded as the parameters \texttt{first\_name}, \texttt{last\_name}, \texttt{phone\_number} and re-bound to new values on every retrieval, so the one program generalizes across contacts. The two transitions out of \texttt{contacts\_app\_open} (an \texttt{action\_navigate} that opens Contacts and the \texttt{action\_click} on the create button) are a small redundancy the compiler emitted and the replayer tolerates; both reach \texttt{create\_contact\_form}. This program is tree-like, but tasks with delete-confirmation dialogs or version-dependent navigation compile into graphs with several outgoing transitions per state, where the state's verification predicate selects the active branch.
 
 \section*{Appendix B. Computer-Action Schema}
 

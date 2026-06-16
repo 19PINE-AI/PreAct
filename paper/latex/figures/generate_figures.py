@@ -127,20 +127,22 @@ def fig_landscape():
     ax.text(9.7, 0.2, "self-extension →", ha="right", fontsize=9, color=GRAY)
     ax.text(0.2, 9.7, "verified, directly\nexecutable ↑", ha="left", va="top",
             fontsize=9, color=GRAY)
+    #            name             x    y   label-dx label-dy  ha
     pts = [
-        ("Skill systems",  2.2, 3.0, GRAY),
-        ("Workflow-Use",   2.0, 2.0, GRAY),
-        ("Muscle-Mem",     3.2, 2.6, GRAY),
-        ("AgentRR",        3.6, 4.2, GRAY),
-        ("ActionEngine",   4.2, 6.4, GRAY),
-        ("PreAct",         8.6, 8.7, ACCENT),
+        ("Skill systems",  1.6, 3.7,  0.35,  0.0,  "left",   GRAY),
+        ("Workflow-Use",   1.5, 1.6,  0.0,  -0.55, "center", GRAY),
+        ("Muscle-Mem",     3.6, 2.3,  0.0,  -0.55, "center", GRAY),
+        ("AgentRR",        3.5, 4.4,  0.35,  0.0,  "left",   GRAY),
+        ("ActionEngine",   4.3, 6.3,  0.0,  -0.6,  "center", GRAY),
+        ("PreAct",         8.5, 8.6,  0.0,  -0.8,  "center", ACCENT),
     ]
-    for name, x, y, col in pts:
+    for name, x, y, ldx, ldy, lha, col in pts:
         star = (name == "PreAct")
-        ax.scatter([x], [y], s=320 if star else 150, color=col, zorder=3,
+        ax.scatter([x], [y], s=340 if star else 150, color=col, zorder=3,
                    edgecolor="white", lw=1.4, marker="*" if star else "o")
-        ax.text(x, y - (0.75 if star else 0.55), name, ha="center", va="top",
-                fontsize=9.5 if star else 9,
+        ax.text(x + ldx, y + ldy, name, ha=lha,
+                va="top" if ldy < 0 else "center",
+                fontsize=10 if star else 9,
                 fontweight="bold" if star else "normal",
                 color=ACCENT if star else INK)
     # shaded "goal" region
@@ -155,39 +157,59 @@ def fig_landscape():
 
 # ====================================================================== Fig 3
 def fig_program_graph():
-    """The compiled 'add a contact' state machine as a graph."""
-    fig, ax = plt.subplots(figsize=(7.8, 2.8))
-    ax.set_xlim(0, 15.4); ax.set_ylim(0, 5.4); ax.axis("off")
-    BW = 2.0
-    states = [
-        (0.2,  "home",          "launcher\nvisible"),
-        (3.4,  "contacts_main", "pkg =\ncontacts"),
-        (6.6,  "form_open",     "name_field\npresent"),
-        (9.8,  "form_filled",   'text =\n"\\$first \\$last"'),
-        (13.0, "saved",         "terminal"),
+    """The real compiled 'add a contact' program (program ab4390a9) as a
+    vertical state machine: state id + verification predicate per box, action
+    on each transition. Matches Listing 1 exactly."""
+    # (state id, predicate summary, action onto the NEXT state or None)
+    rows = [
+        ("contacts_app_open",   "'+' create button visible",
+         "tap  '+'  (create contact)"),
+        ("create_contact_form", "First-name field shown",
+         "type  first_name"),
+        ("first_name_entered",  "Last-name field shown",
+         "type  last_name"),
+        ("last_name_entered",   "Phone field shown",
+         "type  phone_number"),
+        ("phone_entered",       "'Mobile' label shown",
+         "tap  'Mobile'"),
+        ("phone_type_selected", "'Save' button shown",
+         "tap  'Save'"),
+        ("contact_saved",       "terminal -- contact written", None),
     ]
-    yb = 2.6
-    for x, sid, pred in states:
-        term = (sid == "saved")
-        rbox(ax, x, yb, BW, 1.0, sid,
-             fc="#FBF1DD" if term else INKBOX,
-             ec=GOLD if term else ACCENT, fs=9.5, bold=True)
-        ax.text(x + BW / 2, yb - 0.46, pred, ha="center", va="top", fontsize=7.4,
-                color=GRAY, style="italic")
-        ax.text(x + BW / 2, yb + 1.30, r"$\models$", ha="center", fontsize=11,
-                color=TEAL)
-    actions = ['open_app\n"Contacts"', 'tap "Create\nnew contact"',
-               'type\n"\\$first \\$last"', 'tap "Save"\n(+ phone, label)']
-    xs = [s[0] for s in states]
-    for i, act in enumerate(actions):
-        x0 = xs[i] + BW; x1 = xs[i + 1]
-        arrow(ax, (x0, yb + 0.5), (x1, yb + 0.5), color=ACCENT, lw=1.6)
-        ax.text((x0 + x1) / 2, yb + 0.60, act, ha="center", va="bottom",
-                fontsize=6.6, color=ACCENT)
-    ax.text(0.2, 0.7, "States carry verification predicates "
-            r"($\models$); transitions carry actions. "
-            "Parameters (\\$first, \\$phone, ...) are lifted from the trace.",
-            fontsize=8, color=GRAY, style="italic")
+    n = len(rows)
+    BW, BH = 5.4, 1.16
+    gap = 0.62
+    x0 = 1.1
+    top = 0.4
+    H = n * BH + (n - 1) * gap + 1.1
+    fig, ax = plt.subplots(figsize=(5.7, 1.16 * n + 1.4))
+    ax.set_xlim(0, 8.0); ax.set_ylim(0, H); ax.axis("off")
+
+    def yof(i):  # box bottom y, top row highest
+        return H - top - BH - i * (BH + gap)
+
+    for i, (sid, pred, act) in enumerate(rows):
+        yb = yof(i)
+        term = (i == n - 1)
+        ax.add_patch(FancyBboxPatch((x0, yb), BW, BH,
+                     boxstyle="round,pad=0.02,rounding_size=0.10",
+                     fc="#FBF1DD" if term else INKBOX,
+                     ec=GOLD if term else ACCENT, lw=1.3))
+        ax.text(x0 + 0.3, yb + BH * 0.66, sid, ha="left", va="center",
+                fontsize=10, fontweight="bold", color=GOLD if term else ACCENT)
+        ax.text(x0 + 0.3, yb + BH * 0.28,
+                ("" if term else r"$\models$  ") + pred, ha="left",
+                va="center", fontsize=8.0, color=GRAY, style="italic")
+        if act is not None:
+            ytop_next = yof(i + 1) + BH
+            arrow(ax, (x0 + BW / 2, yb), (x0 + BW / 2, ytop_next),
+                  color=ACCENT, lw=1.7)
+            ax.text(x0 + BW / 2 + 0.25, (yb + ytop_next) / 2, act, ha="left",
+                    va="center", fontsize=8.2, color=ACCENT)
+    ax.text(x0, 0.18, "State boxes hold a verification predicate "
+            r"($\models$); arrows hold an action. "
+            "first_name, last_name, phone_number are parameters.",
+            fontsize=7.6, color=GRAY, style="italic")
     save(fig, "fig_program_graph")
 
 
@@ -216,19 +238,23 @@ def fig_architecture():
     yc = TOP + H / 2
     lab((2.2, yc), (3.0, yc), "")
     lab((5.2, yc), (6.2, yc), "P")
-    lab((4.1, TOP), (6.4, BOT + H), "no candidate", off=(-0.1, 0.0), fs=7.5)
+    # "no candidate": draw arrow, then place label clear of the line (lower-left)
+    arrow(ax, (4.1, TOP), (6.4, BOT + H), color=INK)
+    ax.text(3.95, 2.45, "no candidate", ha="left", va="center", fontsize=7.5,
+            color=INK)
     lab((7.4, TOP), (7.4, BOT + H), "replay\nfail", color=BAD, fs=7.5,
-        off=(0.62, -0.55))
+        off=(0.55, -0.5))
     lab((8.8, BOT + H / 2), (9.8, BOT + H / 2), "trace", fs=7.5)
-    lab((10.8, BOT + H), (10.8, TOP), "P'", off=(0.22, -0.55))
-    lab((11.9, yc), (12.7, yc), "store/\nreplace", off=(0.0, 0.6), fs=7.5)
-    ax.plot([13.75, 13.75], [TOP + H, 6.6], color=ACCENT, lw=1.3, ls="--")
-    ax.plot([13.75, 4.6], [6.6, 6.6], color=ACCENT, lw=1.3, ls="--")
-    arrow(ax, (4.6, 6.6), (4.1, 6.6), color=ACCENT);
-    ax.plot([4.1, 4.1], [6.6, TOP + H], color=ACCENT, lw=1.3, ls="--")
-    arrow(ax, (4.1, 5.1), (4.1, TOP + H), color=ACCENT)
-    ax.text(9.0, 6.75, "retrieve on next invocation", ha="center", fontsize=8,
-            color=ACCENT)
+    lab((10.8, BOT + H), (10.8, TOP), "P'", off=(0.22, -0.5))
+    lab((11.9, yc), (12.7, yc), "store /\nreplace", off=(0.0, 0.58), fs=7.5)
+    # feedback loop corpus -> selector: single clean path with ONE arrowhead
+    fy = 6.7
+    ax.plot([13.75, 13.75], [TOP + H, fy], color=ACCENT, lw=1.3, ls="--")
+    ax.plot([13.75, 4.1], [fy, fy], color=ACCENT, lw=1.3, ls="--")
+    ax.plot([4.1, 4.1], [fy, 5.3], color=ACCENT, lw=1.3, ls="--")
+    arrow(ax, (4.1, 5.3), (4.1, TOP + H), color=ACCENT)
+    ax.text(9.0, fy + 0.12, "retrieve on next invocation", ha="center",
+            fontsize=8, color=ACCENT)
     ax.text(7.5, 0.35, "The corpus is the only growing structure; the harness "
             "code is fixed.", ha="center", fontsize=8.5, color=GRAY,
             style="italic")
@@ -338,12 +364,13 @@ def fig_diff_of_deltas():
                 va="bottom" if on[i] >= 0 else "top")
         ax.text(xx[i] + w / 2, off[i] - 0.55, f"{off[i]:+.1f}", ha="center",
                 fontsize=8.5, va="top")
-        ax.annotate("", xy=(xx[i] - w / 2, on[i]), xytext=(xx[i] - w / 2, off[i]),
+        # "gain" bracket placed at the top of the panel, clear of the bars
+        ax.annotate("", xy=(xx[i] - w / 2, 2.05), xytext=(xx[i] + w / 2, 2.05),
                     arrowprops=dict(arrowstyle="<->", color=GRAY, lw=0.9))
-        ax.text(xx[i] + 0.02, (on[i] + off[i]) / 2, f"gain\n{diff[i]}",
-                ha="left", va="center", fontsize=8, color=GRAY)
+        ax.text(xx[i], 2.3, f"gain {diff[i]}", ha="center", va="bottom",
+                fontsize=8, color=GRAY)
     ax.set_xticks(xx); ax.set_xticklabels(plats)
-    ax.set_ylabel("Cold→warm Δ (tasks)"); ax.set_ylim(-8.8, 3.0)
+    ax.set_ylabel("Cold→warm Δ (tasks)"); ax.set_ylim(-8.8, 3.2)
     ax.legend(frameon=False, fontsize=9, loc="lower left", ncol=2)
     save(fig, "fig_diff_of_deltas")
 
@@ -351,34 +378,34 @@ def fig_diff_of_deltas():
 # ====================================================================== Fig 9
 def fig_gate_flow():
     """The verify-before-store decision."""
-    fig, ax = plt.subplots(figsize=(7.4, 2.9))
-    ax.set_xlim(0, 15); ax.set_ylim(0, 4.6); ax.axis("off")
-    yc = 2.4
+    fig, ax = plt.subplots(figsize=(7.8, 3.0))
+    ax.set_xlim(0, 16.4); ax.set_ylim(0, 4.7); ax.axis("off")
+    yc = 2.5
     rbox(ax, 0.2, yc - 0.5, 2.1, 1.0, "CUA\nsucceeds", fc="#FDEFEF", ec=BAD,
          fs=9)
-    rbox(ax, 2.9, yc - 0.5, 2.0, 1.0, "compile $P'$", fs=9)
-    rbox(ax, 5.5, yc - 0.5, 2.7, 1.0, "reset env +\nverify-replay $P'$", fs=9)
+    rbox(ax, 2.8, yc - 0.5, 2.0, 1.0, "compile $P'$", fs=9)
+    rbox(ax, 5.3, yc - 0.5, 2.9, 1.0, "reset env +\nverify-replay $P'$", fs=9)
     # decision diamond
-    dx, dy = 9.6, yc
-    diamond = plt.Polygon([(dx, dy + 1.0), (dx + 1.5, dy), (dx, dy - 1.0),
+    dx, dy = 9.9, yc
+    diamond = plt.Polygon([(dx, dy + 1.05), (dx + 1.5, dy), (dx, dy - 1.05),
                            (dx - 1.5, dy)], closed=True, fc=INKBOX, ec=ACCENT,
                           lw=1.3)
     ax.add_patch(diamond)
-    ax.text(dx, dy, "replay_ok\n∧ score≥1?", ha="center", va="center",
-            fontsize=8.5)
-    rbox(ax, 12.6, yc + 0.55, 2.2, 0.9, "store / replace", fc="#E8F2EC",
-         ec=GREEN, fs=9, tc=GREEN, bold=True)
-    rbox(ax, 12.6, yc - 1.45, 2.2, 0.9, "reject", fc="#FDEFEF", ec=BAD, fs=9,
+    ax.text(dx, dy, "replay_ok\nand score" + r"$\,\geq\,$" + "1?", ha="center",
+            va="center", fontsize=8.3)
+    rbox(ax, 12.9, yc + 0.55, 3.2, 0.9, "store / replace", fc="#E8F2EC",
+         ec=GREEN, fs=9.5, tc=GREEN, bold=True)
+    rbox(ax, 12.9, yc - 1.45, 3.2, 0.9, "reject", fc="#FDEFEF", ec=BAD, fs=9.5,
          tc=BAD, bold=True)
-    arrow(ax, (2.3, yc), (2.9, yc)); arrow(ax, (4.9, yc), (5.5, yc))
+    arrow(ax, (2.3, yc), (2.8, yc)); arrow(ax, (4.8, yc), (5.3, yc))
     arrow(ax, (8.2, yc), (dx - 1.5, yc))
-    arrow(ax, (dx + 1.2, dy + 0.35), (12.6, yc + 1.0), color=GREEN)
-    arrow(ax, (dx + 1.2, dy - 0.35), (12.6, yc - 1.0), color=BAD)
-    ax.text(11.7, yc + 1.15, "yes", color=GREEN, fontsize=8)
-    ax.text(11.7, yc - 1.2, "no", color=BAD, fontsize=8)
-    ax.text(7.0, 0.35, 'rejects the “runs but doesn\'t work” case: cov=100%, '
-            'score=0 (the contact is never written)', ha="center", fontsize=8,
-            color=BAD, style="italic")
+    arrow(ax, (dx + 1.05, dy + 0.45), (12.9, yc + 1.0), color=GREEN)
+    arrow(ax, (dx + 1.05, dy - 0.45), (12.9, yc - 1.0), color=BAD)
+    ax.text(12.0, yc + 1.18, "yes", color=GREEN, fontsize=8.5)
+    ax.text(12.0, yc - 1.15, "no", color=BAD, fontsize=8.5)
+    ax.text(8.2, 0.3, "rejects the \"runs but doesn't work\" case:  "
+            "cov=100%, score=0  (the contact is never written)", ha="center",
+            fontsize=8, color=BAD, style="italic")
     save(fig, "fig_gate_flow")
 
 
