@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 // Animated state-machine loop in the hero backdrop. Signal pulses travel the
 // compile-extend-replace cycle: select → replay → fallback → compile → gate → store.
@@ -18,6 +18,7 @@ const EDGES = [
 const pt = (id) => NODES.find((n) => n.id === id)
 
 export default function HeroGraph() {
+  const reduce = useReducedMotion()
   return (
     <svg className="hero__graph" viewBox="0 0 880 440" preserveAspectRatio="xMidYMid slice" aria-hidden>
       <defs>
@@ -32,38 +33,35 @@ export default function HeroGraph() {
         return (
           <g key={i}>
             <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="var(--line-strong)" strokeWidth="1" />
-            <motion.circle
-              r="3.4"
-              fill="url(#edgeGrad)"
-              initial={{ cx: p1.x, cy: p1.y, opacity: 0 }}
-              animate={{ cx: [p1.x, p2.x], cy: [p1.y, p2.y], opacity: [0, 1, 0] }}
-              transition={{ duration: 2.2, repeat: Infinity, delay: i * 0.5, ease: 'easeInOut' }}
-            />
+            {!reduce && (
+              <motion.circle
+                r="3.4"
+                fill="url(#edgeGrad)"
+                initial={{ cx: p1.x, cy: p1.y, opacity: 0 }}
+                animate={{ cx: [p1.x, p2.x], cy: [p1.y, p2.y], opacity: [0, 1, 0] }}
+                transition={{ duration: 2.2, repeat: Infinity, delay: i * 0.5, ease: 'easeInOut' }}
+              />
+            )}
           </g>
         )
       })}
       {NODES.map((n, i) => (
         <g key={n.id}>
-          <motion.circle
-            cx={n.x}
-            cy={n.y}
-            r="6.5"
-            fill={n.tone}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 0.9 }}
-            transition={{ delay: 0.4 + i * 0.1, duration: 0.5 }}
-          />
-          <motion.circle
-            cx={n.x}
-            cy={n.y}
-            r="6.5"
-            fill="none"
-            stroke={n.tone}
-            strokeWidth="1.4"
-            initial={{ scale: 1, opacity: 0.6 }}
-            animate={{ scale: [1, 2.6], opacity: [0.5, 0] }}
-            transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.3 }}
-          />
+          <circle cx={n.x} cy={n.y} r="6.5" fill={n.tone} opacity="0.9" />
+          {!reduce && (
+            <motion.circle
+              cx={n.x}
+              cy={n.y}
+              r="6.5"
+              fill="none"
+              stroke={n.tone}
+              strokeWidth="1.4"
+              initial={{ scale: 1, opacity: 0.6 }}
+              animate={{ scale: [1, 2.6], opacity: [0.5, 0] }}
+              transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.3 }}
+              style={{ transformOrigin: `${n.x}px ${n.y}px` }}
+            />
+          )}
           <text x={n.x} y={n.y - 14} fill={n.tone} fontSize="10.5" fontFamily="var(--font-mono)" textAnchor="middle" opacity="0.7">
             {n.label}
           </text>

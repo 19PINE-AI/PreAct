@@ -1,18 +1,18 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { HEADLINES } from '../data/results'
 import HeroGraph from './HeroGraph'
 import './Hero.css'
 
-const stagger = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } },
-}
-const item = {
-  hidden: { opacity: 0, y: 28 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } },
-}
-
 export default function Hero() {
+  const reduce = useReducedMotion()
+  const stagger = {
+    hidden: {},
+    show: { transition: { staggerChildren: reduce ? 0 : 0.09, delayChildren: reduce ? 0 : 0.15 } },
+  }
+  const item = {
+    hidden: { opacity: reduce ? 1 : 0, y: reduce ? 0 : 28 },
+    show: { opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] } },
+  }
   return (
     <header className="hero" id="top">
       <HeroGraph />

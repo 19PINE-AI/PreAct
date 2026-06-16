@@ -43,6 +43,19 @@
 
 html { scroll-behavior: smooth; scroll-padding-top: 86px; }
 
+/* Respect users who ask for less motion: no smooth scroll, and collapse any
+   CSS animation/transition. (Framer-motion entrances are disabled in JS via
+   useReducedMotion, so content renders fully visible and static.) */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 body {
   background: var(--bg);
   color: var(--ink);

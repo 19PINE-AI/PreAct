@@ -1,7 +1,16 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 // Scroll-triggered staggered reveal used throughout the site.
+// When the visitor prefers reduced motion we render plain, fully-visible
+// markup with no animation at all.
 export default function Reveal({ children, delay = 0, y = 26, className, as = 'div' }) {
+  const reduce = useReducedMotion()
+
+  if (reduce) {
+    const Tag = as
+    return <Tag className={className}>{children}</Tag>
+  }
+
   const M = motion[as] || motion.div
   return (
     <M
