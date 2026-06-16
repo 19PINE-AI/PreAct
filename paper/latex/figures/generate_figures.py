@@ -103,7 +103,7 @@ def fig_rerun_crisis():
     ax.annotate("one-time compile + verify\n(+162% / +217% of a solve)",
                 xy=(1, preact[0]), xytext=(2.0, 6.4), fontsize=8.5,
                 arrowprops=dict(arrowstyle="-|>", color=INK, lw=0.9))
-    ax.annotate("warm replays: 8.5–13× cheaper",
+    ax.annotate("warm replays: no LLM calls\n(8.5–13× faster wall-clock)",
                 xy=(7, preact[6]), xytext=(4.2, 1.7), fontsize=8.5,
                 color=ACCENT,
                 arrowprops=dict(arrowstyle="-|>", color=ACCENT, lw=0.9))
