@@ -1,0 +1,58 @@
+import Reveal from './Reveal'
+import './Footer.css'
+
+export default function Footer() {
+  return (
+    <footer className="footer" id="cite">
+      <div className="shell">
+        <Reveal className="footer__cta panel">
+          <div>
+            <span className="divider-num">OPEN SOURCE</span>
+            <h2>Open, and reproducible.</h2>
+            <p>
+              The code, the run scripts, and the saved programs from every run are released.
+              Each experiment in the paper can be reproduced by flipping a single setting.
+            </p>
+            <div className="footer__links">
+              <a className="btn btn-primary" href="https://github.com/bojieli/PreAct" target="_blank" rel="noreferrer">github.com/bojieli/PreAct ↗</a>
+              <a className="btn" href="https://01.me/research/PreAct/" target="_blank" rel="noreferrer">01.me/research/PreAct ↗</a>
+            </div>
+          </div>
+          <div className="footer__repro mono">
+            <div className="footer__repro-row"><span className="scrim"># cold → warm, gate ablation</span></div>
+            <div className="footer__repro-row"><span className="signal-pass">PREACT_VERIFY_GATE</span>=on \</div>
+            <div className="footer__repro-row footer__indent">python -m benchmark.androidworld.run_docker \</div>
+            <div className="footer__repro-row footer__indent">--tasks official-15 --seed 42</div>
+            <div className="footer__repro-row footer__spacer"> </div>
+            <div className="footer__repro-row"><span className="scrim"># env data: rag_db_*/ · *.log</span></div>
+            <div className="footer__repro-row"><span className="scrim"># tables: paper/findings_summary.md</span></div>
+          </div>
+        </Reveal>
+
+        <Reveal className="footer__cite" delay={0.06}>
+          <span className="divider-num">CITE</span>
+          <pre className="footer__bib mono">{`@article{preact2026,
+  title  = {PreAct: Computer-Using Agents that
+            Get Faster on Repeated Tasks},
+  author = {Bojie Li},
+  year   = {2026},
+  note   = {Pine AI},
+}`}</pre>
+        </Reveal>
+
+        <div className="footer__bottom">
+          <div className="footer__brand">
+            <span className="footer__mark" aria-hidden />
+            <span className="mono">PreAct · Pine AI · 2026</span>
+          </div>
+          <nav className="footer__nav mono">
+            <a href="#architecture">How it works</a>
+            <a href="#demo">Try it</a>
+            <a href="#corpus">Programs</a>
+            <a href="#results">Results</a>
+          </nav>
+        </div>
+      </div>
+    </footer>
+  )
+}

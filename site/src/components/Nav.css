@@ -1,0 +1,83 @@
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  transition: all 0.4s var(--ease);
+  border-bottom: 1px solid transparent;
+}
+.nav--scrolled {
+  background: rgba(10, 12, 16, 0.78);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 70px;
+}
+.nav__brand { display: flex; align-items: center; gap: 11px; }
+.nav__name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.32rem;
+  letter-spacing: -0.03em;
+}
+.nav__mark { position: relative; width: 34px; height: 16px; display: inline-block; }
+.nav__node {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--replay);
+  box-shadow: 0 0 10px var(--replay-glow);
+}
+.nav__node--pass { left: auto; right: 0; background: var(--pass); box-shadow: 0 0 12px var(--pass-glow); }
+.nav__edge {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  width: 18px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--replay), var(--pass));
+}
+.nav__links { display: flex; gap: 26px; }
+.nav__links a {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+  letter-spacing: 0.02em;
+  padding: 6px 0;
+  position: relative;
+  transition: color 0.22s var(--ease);
+}
+.nav__links a:hover { color: var(--ink); }
+.nav__links a.is-active { color: var(--pass); }
+.nav__links a.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--pass);
+  box-shadow: 0 0 8px var(--pass-glow);
+}
+.nav__cta {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  transition: all 0.25s var(--ease);
+}
+.nav__cta:hover { border-color: var(--pass); color: var(--pass); }
+
+@media (max-width: 900px) {
+  .nav__links { display: none; }
+}
