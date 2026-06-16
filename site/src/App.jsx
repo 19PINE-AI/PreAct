@@ -4,7 +4,7 @@ import Problem from './components/Problem'
 import Architecture from './components/Architecture'
 import Demo from './components/Demo'
 import Corpus from './components/Corpus'
-import Benchmarks from './components/Benchmarks'
+import Trajectories from './components/Trajectories'
 import Results from './components/Results'
 import Footer from './components/Footer'
 
@@ -18,7 +18,7 @@ export default function App() {
         <Architecture />
         <Demo />
         <Corpus />
-        <Benchmarks />
+        <Trajectories />
         <Results />
       </main>
       <Footer />

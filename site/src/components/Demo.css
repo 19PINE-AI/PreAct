@@ -81,3 +81,5 @@
   .demo__stage { grid-template-columns: 1fr; }
   .demo__console { position: static; }
 }
+
+.demo__phone-wrap { display: flex; justify-content: center; margin: 4px 0 16px; }

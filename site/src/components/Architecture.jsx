@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Reveal from './Reveal'
-import { COMPONENTS, ALGORITHM } from '../data/architecture'
+import { COMPONENTS } from '../data/architecture'
 import './Architecture.css'
 
 const toneClass = { pass: 'signal-pass', replay: 'signal-replay', amber: 'signal-amber', neutral: '' }
@@ -79,27 +79,6 @@ export default function Architecture() {
             </AnimatePresence>
           </Reveal>
         </div>
-
-        {/* algorithm */}
-        <Reveal className="arch__algo" delay={0.08}>
-          <div className="arch__algo-head">
-            <h3>The loop, in full</h3>
-            <p className="scrim">
-              The only way a program ever enters the library is the gated
-              <span className="mono signal-pass"> save</span> step: it must first pass an
-              independent re-check, so the library can only get better, never worse.
-            </p>
-          </div>
-          <div className="arch__code panel">
-            {ALGORITHM.map((line, i) => (
-              <div key={i} className={`arch__code-line arch__k-${line.kind}`}>
-                <span className="arch__code-num mono">{String(i + 1).padStart(2, '0')}</span>
-                <span className="arch__code-src mono">{line.l}</span>
-                {line.c && <span className="arch__code-comment mono">▸ {line.c}</span>}
-              </div>
-            ))}
-          </div>
-        </Reveal>
       </div>
     </section>
   )

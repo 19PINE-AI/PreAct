@@ -6,7 +6,7 @@ const LINKS = [
   ['architecture', 'How it works'],
   ['demo', 'Try it'],
   ['corpus', 'Programs'],
-  ['benchmarks', 'Test cases'],
+  ['trajectories', 'Real runs'],
   ['results', 'Results'],
 ]
 

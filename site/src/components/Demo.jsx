@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Reveal from './Reveal'
+import PhoneFrame from './PhoneFrame'
 import { EXAMPLE_PROGRAM } from '../data/architecture'
+import { TRAJECTORIES } from '../data/trajectories'
 import './Demo.css'
+
+// Real screenshots from the actual "add a contact" run, one per program state
+// (we skip the launcher frame, so state i -> screenshot i+1 of the real run).
+const CONTACT = TRAJECTORIES.find((t) => t.id.startsWith('ContactsAddContact'))
+const CONTACT_IMGS = CONTACT ? CONTACT.steps.map((s) => s.img) : []
 
 // Three scenarios the harness can encounter on a compiled program.
 const SCENARIOS = {
@@ -78,6 +85,15 @@ export default function Demo() {
   const haltState = sc.failAt >= 0 ? sc.failAt + 1 : total
   const showVerdict = step > haltState
 
+  // Map the program walk onto the real screenshots of the contact run.
+  const reached = Math.min(step, haltState) // states reached so far
+  const imgIdx = Math.min(reached, CONTACT_IMGS.length - 1)
+  const phoneSrc = CONTACT_IMGS[imgIdx]
+  const phoneBadge = !showVerdict ? null
+    : sc.tone === 'pass' ? { tone: 'pass', text: 'contact saved ✓' }
+    : sc.tone === 'fail' ? { tone: 'fail', text: 'no contact created' }
+    : { tone: 'amber', text: 'screen didn’t match' }
+
   return (
     <section id="demo">
       <div className="shell">
@@ -149,20 +165,13 @@ export default function Demo() {
             </div>
           </div>
 
-          {/* gate / verdict console */}
+          {/* live phone screen + verdict */}
           <div className="demo__console panel">
-            <span className="mono scrim">THE CHECK</span>
-            <p className="demo__blurb">{sc.blurb}</p>
-
-            <div className="demo__meters">
-              <Meter label="steps completed" value={showVerdict ? sc.cov : step > 0 ? Math.round((Math.min(step, haltState) / total) * 100) : 0} suffix="%" tone={sc.tone} />
-              <div className="demo__meter">
-                <span className="mono demo__meter-lbl">task actually solved?</span>
-                <span className={`demo__score mono ${showVerdict && sc.score !== null ? (sc.score >= 1 ? 'signal-pass' : 'signal-fail') : 'scrim'}`}>
-                  {showVerdict && sc.score !== null ? sc.score.toFixed(1) : '—'}
-                </span>
-              </div>
+            <span className="mono scrim">THE PHONE — REAL SCREENSHOTS</span>
+            <div className="demo__phone-wrap">
+              <PhoneFrame src={phoneSrc} badge={phoneBadge} dim={sc.tone !== 'pass' && showVerdict} />
             </div>
+            <p className="demo__blurb">{sc.blurb}</p>
 
             <AnimatePresence>
               {showVerdict && (
@@ -180,7 +189,7 @@ export default function Demo() {
 
             {!showVerdict && (
               <div className="demo__idle scrim mono">
-                {running ? '› running the program…' : '› press replay to see what the check decides'}
+                {running ? '› running the program on the phone…' : '› press replay to run it on the phone'}
               </div>
             )}
           </div>

@@ -1,0 +1,47 @@
+/* Android-style device bezel framing a real screenshot */
+.phone { display: flex; justify-content: center; }
+.phone__bezel {
+  position: relative;
+  width: 244px;
+  padding: 12px 10px 14px;
+  background: linear-gradient(160deg, #1b1f29, #0d1016);
+  border: 1px solid var(--line-strong);
+  border-radius: 30px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.03);
+}
+.phone__cam {
+  position: absolute;
+  top: 7px; left: 50%; transform: translateX(-50%);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #05070b;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.04);
+}
+.phone__screen {
+  position: relative;
+  width: 224px; height: 470px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+}
+.phone__shot {
+  width: 100%; display: block;
+  transition: opacity 0.25s var(--ease), filter 0.25s var(--ease);
+}
+.phone__shot.is-dim { filter: grayscale(0.5) brightness(0.78); }
+.phone__blank { width: 100%; height: 100%; background: #0d1016; }
+.phone__badge {
+  position: absolute;
+  left: 50%; bottom: 14px; transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+.phone__badge--pass { background: rgba(182,242,74,0.92); color: #0a0c10; }
+.phone__badge--fail { background: rgba(255,107,107,0.94); color: #0a0c10; }
+.phone__badge--amber { background: rgba(255,180,84,0.94); color: #0a0c10; }
