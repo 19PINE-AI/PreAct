@@ -27,6 +27,13 @@ Computer-using agents drive real software by reading the screen and issuing clic
 Reusing programs this way has a catch: a stored program can run all the way to its last step and still not accomplish the task, leaving the contact unsaved. PreAct guards against this by re-running each freshly compiled program from a clean state and keeping it only when an independent evaluator confirms the task was solved. Across three very different environments---a mobile, a desktop, and a web benchmark---this check is what lets repeated runs improve rather than slowly degrade as faulty programs pile up. A simple fallback, exploring a task afresh whenever no stored program fits, brings PreAct level with a strong record-and-replay baseline. We also report what did not matter: the wording of the agent's prompts and a set of runtime guardrails make no measurable difference, and a plain embedding retriever chooses which program to reuse about as well as a language model does.
 \end{abstract}
 
+\begin{center}
+\small
+Code: \url{https://github.com/bojieli/PreAct} \\[2pt]
+Website: \url{https://01.me/research/preact}
+\end{center}
+\vspace{-0.6em}
+
 \section{Introduction}
 \label{sec:intro}
 
@@ -488,14 +495,10 @@ Beyond the eleven in-scope validity threats closed in Table~\ref{tab:gap-closure
 \end{itemize}
 Detailed measurements and analysis for L1--L5 in Appendix~E.
 
-\section{Conclusion}
-\label{sec:conclusion}
+\subsection{Future Work}
+\label{sec:future-work}
 
-PreAct started from a simple observation---a computer-using agent should not re-derive a task it has already solved---and showed that the way to act on it is to make the stored artifact directly executable and to never trust it until it has been verified. The harness has two cooperating load-bearing mechanisms: the verify-before-store gate (\S\ref{sec:eval-gate}), which keeps the corpus monotonic, and a cache-miss-to-CUA fallback (\S\ref{sec:eval-baselines-fallback}), which handles tasks the gate empties. A cross-platform 2$\times$2 ablation at $n{=}5{+}5{+}4$ shows the gate is empirically necessary for monotonicity on three structurally different platforms (AndroidWorld, OSWorld, WebArena), with reproducible cov$=$100\%/score$=$0 replays documenting the lossy-compile pattern it filters and a cross-platform meta-test $p \approx 10^{-4}$. A matched $n{=}4{+}4$ head-to-head against Muscle-Mem on WebArena initially exposed a gap (warm-$\Delta$ $-4.0$ vs.\ $-0.75$); adding the cache-miss fallback closes it ($-1.0$ vs.\ $-0.75$, statistically indistinguishable) while preserving the gate's Android/OSWorld monotonicity. The \emph{negative} findings are equally informative: code-level runtime guardrails are aggregate-neutral, prompt-level Pre-Act content is dead code in production, and even a small embedding-RAG selector ($\tau$-tuned) matches the agentic LLM selector on this corpus. \textbf{Two pieces of the harness work in tandem; the runtime add-ons do not.}
-
-The architectural commitment that makes this possible is \emph{the artifact is the runtime}: state-machine programs in PreAct's corpus are not flat scripts generated from a state machine but the directly-executable graphs themselves. What the agent ``remembers'' is what it can directly execute, and the corpus self-extends through verified compile cycles.
-
-Future work falls in three directions:
+Three directions stand out.
 
 \textbf{Scaling the corpus.} The current corpus (58 Android programs after multi-week experiments) is small. We have not characterized the corpus's behavior at $10^3$ or $10^4$ programs: does the agentic selector still discriminate accurately when the candidate set is large? Does dedup-signature collision become an issue? Does the verify-replay step cost become prohibitive at scale?
 
@@ -503,16 +506,16 @@ Future work falls in three directions:
 
 \textbf{Long-horizon tasks.} Both AndroidWorld and OSWorld have task horizons of order 10--30 actions. Tasks requiring long-term planning, goal decomposition, or recovery from compound failures (e.g., entire workflow tasks lasting hundreds of actions) are not represented in our benchmarks. We expect the harness's CUA-fallback mechanism to be tested most severely on such tasks; integration with explicit goal-decomposition planners is the natural next step.
 
-A closing thought. The agents in this paper get faster not by thinking faster but by remembering in a form they can run---and, crucially, by refusing to remember anything they cannot prove still works. That second discipline is the easy one to skip and the one that turns out to matter most: a memory that grows without verification does not make an agent smarter over time, it makes it confidently wrong. ``Add Emilia Gonzalez'' should take seconds the second time---but only if the agent first checked that the contact was really there.
+\section{Conclusion}
+\label{sec:conclusion}
 
-\section*{Reproducibility}
-\label{sec:reproducibility}
+PreAct started from a simple observation: a computer-using agent should not re-derive a task it has already solved. Acting on it required two commitments. The first is representational---\emph{the artifact is the runtime}: what the agent remembers is a directly-executable state-machine program, not a transcript to be re-interpreted. The second is disciplinary---the agent never trusts a remembered program until it has independently re-verified that the program still reaches the goal. Across three structurally different platforms these two ideas, working in tandem, let an agent get faster on repeated work while keeping its growing memory honest. The pieces we expected to matter often did not: runtime guardrails were aggregate-neutral, prompt-level guidance was dead code in production, and a small embedding retriever matched the agentic LLM selector. What proved load-bearing was the pairing of an executable memory with the refusal to store anything unverified.
 
-\textbf{Code.} The PreAct harness, multi-seed run scripts, and the patched Android container endpoint (\texttt{android\_server\_patched.py}; see Appendix~C) are released at \url{https://github.com/bojieli/PreAct}. Algorithm~\ref{alg:harness} is implemented in \texttt{preact/cli.py} (top-level loop), \texttt{preact/executor/} (state-machine replayer), \texttt{preact/generator/} (compiler), and \texttt{preact/rag/} (corpus + selector). All env-var ablation knobs used in this paper are documented in the repo README: \texttt{PREACT\_VERIFY\_GATE}, \texttt{PREACT\_GUARDRAILS}, \texttt{PREACT\_SELECTOR\_MODE}, \texttt{PREACT\_COMPILE\_PROVIDER}, \texttt{PREACT\_RUNTIME\_MODE}, \texttt{PREACT\_LLM\_PROVIDER}, and \texttt{RAG\_DB\_PATH}.
+That refusal is the part that is easy to skip and the part that matters most. A memory that grows without verification does not make an agent smarter over time---it makes it confidently wrong, retrieving a plausible-looking program that no longer works and executing it to completion with nothing to show for it. As agents accumulate larger and longer-lived skill libraries, the binding question shifts from \emph{can an agent remember what it did} to \emph{can it tell which of its memories are still true}. ``Add Emilia Gonzalez'' should take seconds the second time---but only if the agent first checks that the contact is really there.
 
-\textbf{Data.} Per-seed rag\_db snapshots for each cold and warm run (Tables~\ref{tab:monotonic}, \ref{tab:gate-android}, \ref{tab:gate-osworld}, \ref{tab:guardrails}) are preserved under \texttt{rag\_db\_*} directories named after the experiment and seed; raw run logs (\texttt{*.log}) record per-task pass/fail, replay coverage, and gate-rejection events. The \texttt{paper/findings\_summary.md} file in the repo contains the exhaustive per-task tables underlying every aggregate number in this paper.
+\section*{Acknowledgements}
 
-\textbf{Environments.} AndroidWorld experiments use \texttt{huggingface/android\_world:latest} with the \texttt{/state} endpoint patch volume-mounted from \texttt{android\_server\_patched.py}; OSWorld experiments use \texttt{happysixd/osworld-docker} via the upstream \texttt{DesktopEnv} provider; WebArena uses the canonical shopping\_admin Docker stack. Models: Gemini 3 Flash via Vertex AI for Android CUA; Claude Sonnet 4.6 (\texttt{claude-sonnet-4-6}) via the Anthropic Computer-Use API for OSWorld and WebArena CUA; Claude Sonnet 4.6 for compile and selector reasoning across all platforms (Gemini-compile is enabled by setting \texttt{PREACT\_COMPILE\_PROVIDER=gemini}).
+We thank Yurun Jin and Junlong Ye for early implementations and experiments of this work. Pine Copilot, Claude Code, and Claude Opus~4.8 were used during this research.
 
 \bibliographystyle{plain}
 \bibliography{references}
