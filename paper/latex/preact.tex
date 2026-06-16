@@ -60,7 +60,17 @@ PreAct makes one commitment the others do not: \textbf{the artifact the agent st
 \section{Related Work}
 \label{sec:related}
 
-We compare PreAct against four classes of prior work: pure CUA baselines, skill-based systems, compilation-based systems, and concurrent record-replay systems. Table~\ref{tab:related} summarizes the comparison along five dimensions.
+PreAct sits at the intersection of five literatures: computer-using agents, the reason--act loop they run, skill and memory systems that try to reuse past behaviour, code as an agent representation, and systems that compile or replay workflows. We survey each in turn, then (Table~\ref{tab:related}, Figure~\ref{fig:landscape}) locate PreAct relative to the closest prior work.
+
+\textbf{Computer-using agents.} A rapidly growing line of work builds agents that operate real software through its graphical interface---clicking, typing, and scrolling---rather than through bespoke APIs~\cite{anthropic2024computeruse}. Early web agents learned from demonstrations or reinforcement on simulated sites~\cite{nakano2021webgpt,yao2022webshop,gur2024webagent}, and benchmarks such as Mind2Web~\cite{deng2023mind2web}, WebArena~\cite{zhou2024webarena}, VisualWebArena~\cite{koh2024visualwebarena}, and WebVoyager~\cite{he2024webvoyager} pushed toward realistic, open-ended websites. A parallel thread grounds vision-language models directly on screen pixels and accessibility trees: SeeAct~\cite{zheng2024seeact}, CogAgent~\cite{hong2024cogagent}, SeeClick~\cite{cheng2024seeclick}, and UI-TARS~\cite{qin2025uitars} learn to localize and act on UI elements. The same paradigm now spans mobile~\cite{zhang2023appagent,wang2024mobileagent,rawles2023androidwild,rawles2024androidworld}, desktop and OS control~\cite{niu2024screenagent,wu2024oscopilot,zhang2024ufo,bonatti2024windows,xie2024osworld}, and software engineering~\cite{yang2024sweagent,jimenez2024swebench}, with reinforcement learning~\cite{bai2024digirl} and general-assistant benchmarks~\cite{mialon2024gaia} measuring progress. PreAct is agnostic to which such agent fills its CUA-fallback slot; we use AndroidWorld's T3A and Anthropic's Computer-Use API, but the harness wraps any of them.
+
+\textbf{The reason--act loop and its cost.} Almost all of these agents follow the observe--reason--act paradigm popularized by ReAct~\cite{yao2023react}, layered on chain-of-thought and search-style reasoning~\cite{wei2022cot,yao2023tot,wang2023selfconsistency}, tool use~\cite{schick2023toolformer}, self-reflection~\cite{shinn2023reflexion}, and autonomous task loops~\cite{autogpt2023,sumers2024coala}. This loop is exactly what makes repeated execution expensive: every step pays for fresh perception and reasoning even when the task is one the agent has solved before~\cite{lu2025proactive}. PreAct attacks this cost directly by replacing the loop, on familiar tasks, with deterministic graph execution.
+
+\textbf{Skill libraries and experiential memory.} A second response to repetition is to remember. Skill systems accumulate reusable behaviours---Voyager grows a library of code skills~\cite{wang2024voyager}, SAGE and Skill-Pro parameterize learned skills~\cite{liang2024sage,mi2026skillpro}, and ExpeL distills experience into rules~\cite{zhao2024expel}---but each skill still runs inside an LLM-bound loop at execution time. More broadly, agent-memory systems store and retrieve past interactions: generative-agent memory streams~\cite{park2023generative}, operating-system-style memory~\cite{packer2023memgpt}, and production memory stacks~\cite{chhikara2025mem0,xu2025amem} (surveyed in~\cite{zhang2024memorysurvey}), typically consulted by retrieval-augmented generation~\cite{lewis2020rag}. PreAct's corpus is a memory in this sense, but what it stores is \emph{executable}: recall and action are the same step. Scaling such reuse, rather than re-deriving behaviour, is consistent with the ``bitter lesson'' that general mechanisms outrun hand-engineered ones~\cite{sutton2019bitter}.
+
+\textbf{Code as the agent's action and representation.} A third thread expresses agent behaviour as code. PAL, Program-of-Thoughts, and CoCoGen offload reasoning to executable programs~\cite{gao2023pal,chen2023pot,madaan2022cocogen}; Code-as-Policies and CodeAct make code the agent's action space~\cite{liang2023codeaspolicies,wang2024codeact}; Chain-of-Code emulates execution~\cite{li2024chainofcode}; and TroVE and LATM induce reusable, verifiable toolboxes from solved tasks~\cite{wang2024trove,cai2023latm}. PreAct shares the conviction that code is the right substrate for reliable reuse, but its compiled artifact is a \emph{verified state machine executed directly}, not a flat script regenerated and re-interpreted by an LLM each time.
+
+\textbf{Compiling and replaying workflows.} Closest to PreAct are systems that compile or cache concrete workflows. Robotic process automation has long replayed recorded UI scripts deterministically~\cite{aalst2018rpa}; Compiled-AI and ActionEngine compile agent behaviour into deterministic code, the latter generating flat Python from a state machine built by untargeted crawling~\cite{compiledai2026,actionengine2026}; and concurrent record-and-replay systems---Muscle-Mem~\cite{musclemem}, AgentRR~\cite{agentrr2025}, and Workflow-Use~\cite{workflowuse}---cache a linear action sequence and fall back to the agent on a cache miss. We compare against these directly. They share two gaps that PreAct closes: the stored artifact has no per-state verification against the live UI, and it does not improve itself---it is appended, never refined or revalidated. Table~\ref{tab:related} summarizes the comparison.
 
 \begin{table}[t]
 \centering
@@ -100,66 +110,66 @@ ActionEngine & State machine via crawl & Flat-Python generated & None & Re-crawl
 
 We start from the artifact, because in PreAct the artifact \emph{is} the runtime. Listing~\ref{lst:contact} is an \emph{actual} program from the corpus, compiled while the agent ran the \texttt{ContactsAddContact} task from the AndroidWorld benchmark~\cite{rawles2024androidworld}---the trace was the instance ``Create a new contact for Emilia Gonzalez.'' It is a small graph, drawn in Figure~\ref{fig:program-graph}: each \emph{state} carries a verification predicate (an accessibility-tree pattern that must hold on the live screen for the agent to believe it is in that state) and each \emph{transition} carries an action. The concrete values typed during the trace are lifted to \emph{parameters}---here \texttt{first\_name}, \texttt{last\_name}, \texttt{phone\_number}, listed in the metadata---so this single program serves every future ``add a contact'' request by binding the parameters to each new contact's values.
 
-\begin{lstlisting}[caption={The actual compiled program for ``add a contact,'' taken verbatim from the corpus (program \texttt{ab4390a9}, AndroidWorld \texttt{ContactsAddContact}). Field names and structure are reproduced exactly; only schema-default \texttt{null} fields, per-state natural-language descriptions, and the long resource-id package prefix (``\texttt{com.google.android.contacts}'', shown as $\ldots$) are elided for space. The complete record is in Appendix~A; Figure~\ref{fig:program-graph} draws the same program.},label={lst:contact},captionpos=b,basicstyle=\ttfamily\small,language={}]
+\begin{lstlisting}[caption={The complete compiled program for ``add a contact,'' taken verbatim from the corpus (program \texttt{ab4390a9}, AndroidWorld \texttt{ContactsAddContact}). Only the schema-default \texttt{null} fields of each action object are omitted; everything else---state ids, verification predicates with their timeouts, per-state descriptions, and the full resource-id selectors---is reproduced exactly. Figure~\ref{fig:program-graph} draws the same program.},label={lst:contact},captionpos=b,basicstyle=\ttfamily\footnotesize,language={}]
 {
   "metadata": {
-    "task_description": "Create a new contact for Emilia Gonzalez. ...",
+    "program_id": "ab4390a9-1902-47a1-821b-ebddc7f4010a",
+    "task_description": "Create a new contact for Emilia Gonzalez. Their number is +14240925675.",
     "application_context": "com.google.android.contacts",
     "parameters": ["first_name", "last_name", "phone_number"]
   },
   "states": [
     { "id": "contacts_app_open",
-      "verification": {"type": "expect_element",
-                       "xpath": "resource_id=...:id/floating_action_button"} },
+      "verification": {"type": "expect_element", "xpath": "resource_id=com.google.android.contacts:id/floating_action_button", "timeout_ms": 5000},
+      "description": "Contacts app is open showing the main list with the Create-Contact FAB visible" },
     { "id": "create_contact_form",
-      "verification": {"type": "expect_element",
-                       "xpath": "class=android.widget.EditText&&hint=First name"} },
+      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=First name", "timeout_ms": 3000},
+      "description": "New-contact creation form is open with the First name field visible" },
     { "id": "first_name_entered",
-      "verification": {"type": "expect_element",
-                       "xpath": "class=android.widget.EditText&&hint=Last name"} },
+      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=Last name", "timeout_ms": 2000},
+      "description": "First name has been entered; Last name field is available" },
     { "id": "last_name_entered",
-      "verification": {"type": "expect_element",
-                       "xpath": "class=android.widget.EditText&&hint=Phone"} },
+      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=Phone", "timeout_ms": 2000},
+      "description": "Last name has been entered; Phone field is available" },
     { "id": "phone_entered",
-      "verification": {"type": "expect_element",
-                       "xpath": "resource_id=android:id/text1&&text=Mobile"} },
+      "verification": {"type": "expect_element", "xpath": "resource_id=android:id/text1&&text=Mobile", "timeout_ms": 2000},
+      "description": "Phone number has been entered; phone-type selector (Mobile) is visible" },
     { "id": "phone_type_selected",
-      "verification": {"type": "expect_element",
-                       "xpath": "resource_id=...:id/toolbar_button&&text=Save"} },
+      "verification": {"type": "expect_element", "xpath": "resource_id=com.google.android.contacts:id/toolbar_button&&text=Save", "timeout_ms": 2000},
+      "description": "Phone type Mobile selected; Save button is visible in the toolbar" },
     { "id": "contact_saved",
-      "verification": {"type": "terminal_state"} }
+      "verification": {"type": "terminal_state", "timeout_ms": 5000},
+      "description": "Contact has been saved successfully and the task is complete" }
   ],
   "transitions": [
     { "from_state": "contacts_app_open", "to_state": "create_contact_form",
-      "action": {"type": "action_click",
-                 "target": "resource_id=...:id/floating_action_button"} },
+      "action": {"type": "action_navigate", "text": "Contacts"} },
+    { "from_state": "contacts_app_open", "to_state": "create_contact_form",
+      "action": {"type": "action_click", "target": "resource_id=com.google.android.contacts:id/floating_action_button"} },
     { "from_state": "create_contact_form", "to_state": "first_name_entered",
-      "action": {"type": "action_type", "parameter_name": "first_name",
-                 "target": "class=android.widget.EditText&&hint=First name"} },
+      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=First name", "parameter_name": "first_name"} },
     { "from_state": "first_name_entered", "to_state": "last_name_entered",
-      "action": {"type": "action_type", "parameter_name": "last_name",
-                 "target": "class=android.widget.EditText&&hint=Last name"} },
+      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=Last name", "parameter_name": "last_name"} },
     { "from_state": "last_name_entered", "to_state": "phone_entered",
-      "action": {"type": "action_type", "parameter_name": "phone_number",
-                 "target": "class=android.widget.EditText&&hint=Phone"} },
+      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=Phone", "parameter_name": "phone_number"} },
     { "from_state": "phone_entered", "to_state": "phone_type_selected",
-      "action": {"type": "action_click",
-                 "target": "resource_id=android:id/text1&&text=Mobile"} },
+      "action": {"type": "action_click", "target": "resource_id=android:id/text1&&text=Mobile"} },
     { "from_state": "phone_type_selected", "to_state": "contact_saved",
-      "action": {"type": "action_click",
-                 "target": "resource_id=...:id/toolbar_button&&text=Save"} }
+      "action": {"type": "action_click", "target": "resource_id=com.google.android.contacts:id/toolbar_button&&text=Save"} }
   ]
 }
 \end{lstlisting}
 
+The three values typed during the trace are recorded as the parameters \texttt{first\_name}, \texttt{last\_name}, \texttt{phone\_number} and re-bound to new values on every retrieval, so the one program generalizes across contacts. The two transitions out of \texttt{contacts\_app\_open} (an \texttt{action\_navigate} that opens Contacts and the \texttt{action\_click} on the create button) are a small redundancy the compiler emitted and the replayer tolerates; both reach \texttt{create\_contact\_form}.
+
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.5\linewidth]{fig_program_graph.pdf}
-\caption{The compiled ``add a contact'' program of Listing~\ref{lst:contact} drawn as a state machine: each box is a state holding a verification predicate ($\models$) that must match the live screen; each arrow is a transition holding an action. The harness executes this graph directly---it is not regenerated into a flat script.}
+\includegraphics[width=0.96\linewidth]{fig_program_graph.pdf}
+\caption{The compiled ``add a contact'' program of Listing~\ref{lst:contact} drawn as a state machine (read top row left-to-right, then bottom row right-to-left). Each box is a state---its verification predicate, which must match the live screen, is given in Listing~\ref{lst:contact}---and each arrow is a transition holding an action. The harness executes this graph directly; it is not regenerated into a flat script.}
 \label{fig:program-graph}
 \end{figure}
 
-Formally a program is a tuple $P=(S,T,M,V)$: states $S$ (id, description, verification predicate), transitions $T$ (each $(s_i, s_j, a)$ firing action $a$ to move from $s_i$ to $s_j$), metadata $M$ (task description, app context, parameter schema, and a \emph{dedup signature} that identifies which task family the program serves), and data-extraction predicates $V$ for question-answering tasks (e.g.\ \texttt{inspect\_text}). The full action vocabulary is in Appendix~B. This graph form buys three things a flat script cannot: \textbf{(1)} per-state verification, so the agent knows immediately when an action did not have the intended effect; \textbf{(2)} branching, since one state can have several outgoing transitions chosen by predicate (a delete-confirmation dialog that appears only on some app versions); and \textbf{(3)} in-place extension, since a new state and transition can be spliced in without regenerating the whole program.
+Formally a program is a tuple $P=(S,T,M,V)$: states $S$ (id, description, verification predicate), transitions $T$ (each $(s_i, s_j, a)$ firing action $a$ to move from $s_i$ to $s_j$), metadata $M$ (task description, app context, parameter schema, and a \emph{dedup signature} that identifies which task family the program serves), and data-extraction predicates $V$ for question-answering tasks (e.g.\ \texttt{inspect\_text}). The full action vocabulary is in Appendix~A. This graph form buys three things a flat script cannot: \textbf{(1)} per-state verification, so the agent knows immediately when an action did not have the intended effect; \textbf{(2)} branching, since one state can have several outgoing transitions chosen by predicate (a delete-confirmation dialog that appears only on some app versions); and \textbf{(3)} in-place extension, since a new state and transition can be spliced in without regenerating the whole program.
 
 \subsection{The loop: select, replay, fall back, verify}
 \label{sec:arch-loop}
@@ -262,8 +272,8 @@ The basic promise is that the second time the agent sees a task, it is faster an
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.52\linewidth]{fig_monotonic.pdf}
-\caption{\textbf{Cold$\to$warm refinement is monotonic.} AndroidWorld official-15 success rate, three Gemini 3 Flash seeds with the corpus reset per seed. Every seed improves (mean $9.33 \to 10.67$ of 15, $\Delta = +1.33$); none regresses. Per-task detail in Appendix~C.}
+\includegraphics[width=0.60\linewidth]{fig_monotonic.pdf}
+\caption{\textbf{Cold$\to$warm refinement is monotonic.} AndroidWorld official-15 success rate, three Gemini 3 Flash seeds with the corpus reset per seed. Every seed improves (mean $9.33 \to 10.67$ of 15, $\Delta = +1.33$); none regresses. Per-task detail in Appendix~B.}
 \label{fig:monotonic}
 \end{figure}
 
@@ -271,7 +281,7 @@ The basic promise is that the second time the agent sees a task, it is faster an
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.46\linewidth]{fig_gatecost.pdf}
+\includegraphics[width=0.58\linewidth]{fig_gatecost.pdf}
 \caption{The gate's one-time cost. Verifying a freshly compiled program (re-running it from a clean state) costs about as much as the original solve---more on OSWorld, where both the solve and the verify-replay are slowest. This is paid once per stored program and amortized over every warm run.}
 \label{fig:gatecost}
 \end{figure}
@@ -287,7 +297,7 @@ Reuse cuts both ways. The same corpus that makes warm runs cheap can make them \
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.82\linewidth]{fig_diff_of_deltas.pdf}
-\caption{\textbf{The gate is what makes repeated runs improve.} Mean cold$\to$warm success-rate change with the gate on (blue) versus off (red), $\pm 1$ s.d. On all three platforms the gate-on bar is higher: with the gate, the corpus improves the agent; without it, the corpus \emph{degrades} the agent as lossy programs accumulate. The gap between the bars (the gate's marginal value) is $1.75$--$2.6$ tasks and points the same way everywhere---this is a property of the harness, not of any one platform. Per-seed data in Appendix~C.}
+\caption{\textbf{The gate is what makes repeated runs improve.} Mean cold$\to$warm success-rate change with the gate on (blue) versus off (red), $\pm 1$ s.d. On all three platforms the gate-on bar is higher: with the gate, the corpus improves the agent; without it, the corpus \emph{degrades} the agent as lossy programs accumulate. The gap between the bars (the gate's marginal value) is $1.75$--$2.6$ tasks and points the same way everywhere---this is a property of the harness, not of any one platform. Per-seed data in Appendix~B.}
 \label{fig:diff}
 \end{figure}
 
@@ -295,7 +305,7 @@ We ran the same $2{\times}2$ ablation---cold/warm $\times$ gate on/off---on all 
 
 \begin{table}[t]
 \centering
-\caption{Verify-gate ablation across three platforms. Each cell is the mean cold$\to$warm change in tasks solved ($\pm 1$ s.d.). With the gate \emph{on}, repeated runs hold or improve; with it \emph{off}, every platform regresses as lossy programs accumulate. ``Gate's gain'' is the gap between the two---the cost of not verifying. The gate-on column is higher on all three platforms, in every one of the 14 paired runs. Per-seed and per-rep tables are in Appendix~C.}
+\caption{Verify-gate ablation across three platforms. Each cell is the mean cold$\to$warm change in tasks solved ($\pm 1$ s.d.). With the gate \emph{on}, repeated runs hold or improve; with it \emph{off}, every platform regresses as lossy programs accumulate. ``Gate's gain'' is the gap between the two---the cost of not verifying. The gate-on column is higher on all three platforms, in every one of the 14 paired runs. Per-seed and per-rep tables are in Appendix~B.}
 \label{tab:gate}
 \small
 \begin{tabular}{@{}lccc@{}}
@@ -406,17 +416,17 @@ Gemini 3 Flash ($n{=}3$ reps) & $6.33/12 \pm 0.58$ & $0/12 \pm 0$ & $-6.33 \pm 0
 \end{tabular}
 \end{table}
 
-Cold SR is statistically indistinguishable across compilers ($6.0$ vs.\ $6.33$, $p > 0.5$), as expected since both use the same Claude Sonnet 4.6 CUA loop on Run~1. The gate's rejection rate is in the same band ($83\%$ with Claude vs.\ $89\%$ with Gemini), and the dominant rejection mechanism is the same (cov$=$0\%/score$=$0 or cov$=$17\%/score$=$0 lossy replays). Qualitatively, Gemini compiles tend to fail at very-first-step replay (cov$=$0\% modal) whereas Claude compiles run to completion but produce wrong answers (cov$=$100\% modal); both failure modes are caught by the gate. The Gemini-compile warm SR is $0/12$ on all three reps with $\sigma{=}0$---tighter than the Claude bimodal distribution ($4, 4, 0, 0$)---reflecting Gemini's higher rate of cov$=$0\% compiles that the gate rejects with $100\%$ consistency. \textbf{The verify-gate is mechanism-driven, not Claude-specific}: substituting Gemini 3 Flash at the compile step does not change the qualitative behavior (gate fires; lossy compiles get rejected; warm SR depends on what survives), and the quantitative rejection rate shifts only modestly ($83 \to 89\%$). Cross-model replication closes the compile-step concern noted under L1 in Appendix~\ref{sec:appendix-limitations}.
+Cold SR is statistically indistinguishable across compilers ($6.0$ vs.\ $6.33$, $p > 0.5$), as expected since both use the same Claude Sonnet 4.6 CUA loop on Run~1. The gate's rejection rate is in the same band ($83\%$ with Claude vs.\ $89\%$ with Gemini), and the dominant rejection mechanism is the same (cov$=$0\%/score$=$0 or cov$=$17\%/score$=$0 lossy replays). Qualitatively, Gemini compiles tend to fail at very-first-step replay (cov$=$0\% modal) whereas Claude compiles run to completion but produce wrong answers (cov$=$100\% modal); both failure modes are caught by the gate. The Gemini-compile warm SR is $0/12$ on all three reps with $\sigma{=}0$---tighter than the Claude bimodal distribution ($4, 4, 0, 0$)---reflecting Gemini's higher rate of cov$=$0\% compiles that the gate rejects with $100\%$ consistency. \textbf{The verify-gate is mechanism-driven, not Claude-specific}: substituting Gemini 3 Flash at the compile step does not change the qualitative behavior (gate fires; lossy compiles get rejected; warm SR depends on what survives), and the quantitative rejection rate shifts only modestly ($83 \to 89\%$). Cross-model replication closes the compile-step concern noted under L1 in Appendix~E.
 
 \subsection{What is \emph{Not} Load-Bearing}
 \label{sec:eval-not-loadbearing}
 
-Equally informative are the AB experiments that produce \emph{negative} (or marginal) results. They sharpen the claim by ruling out the obvious alternative explanations for why PreAct works. Detailed per-seed tables are in Appendix~G.
+Equally informative are the AB experiments that produce \emph{negative} (or marginal) results. They sharpen the claim by ruling out the obvious alternative explanations for why PreAct works. Detailed per-seed tables are in Appendix~F.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.86\linewidth]{fig_selector.pdf}
-\caption{\textbf{A plain embedding retriever matches the LLM-based selector.} On the 58-program corpus, both embedding backbones reach $100\%$ correct-family retrieval (left) at $0\%$ mis-routing of unrelated queries (right) once the similarity threshold $\tau$ is tuned, against the agentic selector's $75.6\%$ (dashed). The selector's implementation is not load-bearing; we keep the agentic one only for its interpretable logs and tuning-free operation. Full sweep in Appendix~G.}
+\caption{\textbf{A plain embedding retriever matches the LLM-based selector.} On the 58-program corpus, both embedding backbones reach $100\%$ correct-family retrieval (left) at $0\%$ mis-routing of unrelated queries (right) once the similarity threshold $\tau$ is tuned, against the agentic selector's $75.6\%$ (dashed). The selector's implementation is not load-bearing; we keep the agentic one only for its interpretable logs and tuning-free operation. Full sweep in Appendix~F.}
 \label{fig:selector}
 \end{figure}
 
@@ -426,11 +436,11 @@ Equally informative are the AB experiments that produce \emph{negative} (or marg
 
 \textbf{Code-level runtime guardrails are aggregate-neutral at $n{=}5$.} A $2{\times}2$ ablation of the guardrails (a double-tap before text entry, an image-task no-op cap, and scroll-exhaustion notes) gives \emph{identical} cold means ($10.2 = 10.2$) and warm means $11.0$ (on) vs.\ $10.6$ (off), a $0.4$-task gap well within seed-level variance (see Table~\ref{tab:guardrails}). Per-task analysis shows the double-tap helps the audio-record-with-filename task (a populated filename dialog) but the gain is cancelled by minor timing penalties on Camera tasks.
 
-\textbf{State-machine vs.\ flat-script runtime: small but consistent advantage.} A \texttt{PREACT\_RUNTIME\_MODE} ablation (\texttt{state\_machine} vs.\ \texttt{flat\_script}; Table~\ref{tab:arch-ab} in Appendix~G) gives flat-script $10.6 \pm 1.14$ ($n{=}5$ seeds) vs.\ state-machine $11.67 \pm 0.58$ on the 3 matched seeds; matched-seed $\Delta = +0.67$ tasks favoring state-machine, all 3 paired comparisons in the non-regressive direction (sign-test $p = 0.125$, suggestive). The wins concentrate on Camera tasks where verification catches mismatches linear execution misses. The architectural commitment matters but is a smaller effect than the verify-gate's 1.75--2.6-task diff-of-deltas.
+\textbf{State-machine vs.\ flat-script runtime: small but consistent advantage.} A \texttt{PREACT\_RUNTIME\_MODE} ablation (\texttt{state\_machine} vs.\ \texttt{flat\_script}; Table~\ref{tab:arch-ab} in Appendix~F) gives flat-script $10.6 \pm 1.14$ ($n{=}5$ seeds) vs.\ state-machine $11.67 \pm 0.58$ on the 3 matched seeds; matched-seed $\Delta = +0.67$ tasks favoring state-machine, all 3 paired comparisons in the non-regressive direction (sign-test $p = 0.125$, suggestive). The wins concentrate on Camera tasks where verification catches mismatches linear execution misses. The architectural commitment matters but is a smaller effect than the verify-gate's 1.75--2.6-task diff-of-deltas.
 
 \textbf{Dynamic step-budget cap: wall-time-only.} The cap \texttt{min(max(20, 8c), 30)} vs.\ unbounded 60-step at $n{=}5$ gives $9.8 \pm 0.84$ (cap-A) vs.\ $11.6 \pm 0.55$ (cap-B); $\Delta = +1.8 \pm 0.84$ tasks (within $\pm 2$ prediction interval) at the cost of +30\% wall time on the FAIL tail (primarily SystemBrightnessMax, harness-deterministic). The current cap saves wall time at modest SR cost.
 
-Per-seed tables for these negative ablations are in Appendix~G, and a complete map of which validity threat each experiment closes---twelve in all, eleven in scope and closed at multi-seed rigor---is in Appendix~I.
+Per-seed tables for these negative ablations are in Appendix~F, and a complete map of which validity threat each experiment closes---twelve in all, eleven in scope and closed at multi-seed rigor---is in Appendix~H.
 
 \section{Discussion}
 \label{sec:discussion}
@@ -456,7 +466,7 @@ Instead, the diff-of-deltas magnitude is structural: it is the rate at which the
 
 \subsection{Per-Program Reproducibility of cov$=$100\%/score$=$0}
 
-The five cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps---the OSWorld Calc-formula program reproduces 5/5 reps, the Calc-chart 4/5, and the Chrome-history 2/5 (per-program breakdown in Appendix~H). \textbf{Crucially, the aggregate regression remains fully deterministic.} All 5 OFF reps lose at least 2 tasks; no rep escapes the regression. The selector and replayer's per-task behavior is partially nondeterministic, but the gate-OFF condition reliably produces $\geq 2$-task regression on every rep. The paper's claims rest on this aggregate-level determinism, not on per-program reproducibility.
+The five cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps---the OSWorld Calc-formula program reproduces 5/5 reps, the Calc-chart 4/5, and the Chrome-history 2/5 (per-program breakdown in Appendix~G). \textbf{Crucially, the aggregate regression remains fully deterministic.} All 5 OFF reps lose at least 2 tasks; no rep escapes the regression. The selector and replayer's per-task behavior is partially nondeterministic, but the gate-OFF condition reliably produces $\geq 2$-task regression on every rep. The paper's claims rest on this aggregate-level determinism, not on per-program reproducibility.
 
 \subsection{Harness-Deterministic vs.\ LLM-Driven Failures}
 \label{sec:disc-harness-det}
@@ -466,11 +476,11 @@ Three AndroidWorld tasks (BrowserDraw, SystemBrightnessMax, SystemWifiTurnOn) an
 \subsection{Out-of-Distribution Generalization}
 \label{sec:eval-ood}
 
-We tested whether the corpus transfers beyond seen tasks by running a test\_tiny-built rag\_db on the 33 non-test\_tiny tasks of OSWorld test\_small at $n{=}3$ reps (with the rag\_db copy reset between reps). Per-rep SR over the 30 OOD tasks that complete setup: $21/30$, $15/30$, $14/30$, giving a warm-OOD mean of $16.7/30 = 56\% \pm 12\%$. The cold-OOD baseline on the same task subset is a single ($n{=}1$) pass at $\approx 20/30 = 67\%$; because it is unpaired and not multi-rep, the gap below should be read as indicative rather than a tightly-estimated effect. \textbf{The corpus does not transfer; at $n{=}3$ the warm-OOD mean is $\approx 11$ percentage points \emph{below} this cold-OOD pass}, a small-but-real headwind rather than the neutral outcome a single pass had suggested. Inspection of the rep logs shows the selector occasionally retrieves a near-miss program (a Chrome task's program retrieved for a Thunderbird task whose description shares the words ``open'' and ``message''), and the brittle XPath/state predicates from the source domain fail on the OOD page, costing replay budget without recovering via CUA fast enough. The selector's no-pick rate on OOD queries does buffer this somewhat---it returns ``no candidate'' on the majority of cross-family queries---but the queries it does pick are penalised. This sharpens the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is concentrated in repeated invocations of seen tasks, and corpora built on small task subsets actively work against out-of-distribution generalization on this evaluator}. Full per-domain breakdown in Appendix~E.
+We tested whether the corpus transfers beyond seen tasks by running a test\_tiny-built rag\_db on the 33 non-test\_tiny tasks of OSWorld test\_small at $n{=}3$ reps (with the rag\_db copy reset between reps). Per-rep SR over the 30 OOD tasks that complete setup: $21/30$, $15/30$, $14/30$, giving a warm-OOD mean of $16.7/30 = 56\% \pm 12\%$. The cold-OOD baseline on the same task subset is a single ($n{=}1$) pass at $\approx 20/30 = 67\%$; because it is unpaired and not multi-rep, the gap below should be read as indicative rather than a tightly-estimated effect. \textbf{The corpus does not transfer; at $n{=}3$ the warm-OOD mean is $\approx 11$ percentage points \emph{below} this cold-OOD pass}, a small-but-real headwind rather than the neutral outcome a single pass had suggested. Inspection of the rep logs shows the selector occasionally retrieves a near-miss program (a Chrome task's program retrieved for a Thunderbird task whose description shares the words ``open'' and ``message''), and the brittle XPath/state predicates from the source domain fail on the OOD page, costing replay budget without recovering via CUA fast enough. The selector's no-pick rate on OOD queries does buffer this somewhat---it returns ``no candidate'' on the majority of cross-family queries---but the queries it does pick are penalised. This sharpens the scope of the ``self-extending corpus'' claim: \textbf{the corpus's value is concentrated in repeated invocations of seen tasks, and corpora built on small task subsets actively work against out-of-distribution generalization on this evaluator}. Full per-domain breakdown in Appendix~D.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.50\linewidth]{fig_ood.pdf}
+\includegraphics[width=0.60\linewidth]{fig_ood.pdf}
 \caption{The corpus does not transfer cleanly. A corpus built on six OSWorld tasks, applied to 30 unseen tasks, lands $\approx 11$ points \emph{below} the cold baseline: a few mis-routed retrievals fire brittle predicates and burn replay budget. The corpus's value is concentrated in repeated invocations of seen tasks.}
 \label{fig:ood}
 \end{figure}
@@ -485,7 +495,7 @@ Beyond the eleven in-scope validity threats closed in Table~\ref{tab:gap-closure
 \item \textbf{(L4) Compile-fidelity rate.} The LLM compiler produces lossy state-machines on a non-trivial fraction of inputs (audit: $\sim 28\%$ Android programs miss \texttt{navigate\_back}; $100\%$ of audited WebArena programs use \texttt{inspect\_screenshot} on dynamic state); the gate filters this at storage but scales as the number of compile attempts, not stored programs.
 \item \textbf{(L5) Selector nondeterminism.} Verbatim retrieval is 73\% exact-id (all 8 misses were semantically-equivalent picks); paraphrase robustness is 75.6\% functional (47\% exact-id + 29\% equivalent), 24\% no-pick, \textbf{0\% wrong-task-family}---the selector is conservative-by-design rather than over-eager.
 \end{itemize}
-Detailed measurements and analysis for L1--L5 in Appendix~F.
+Detailed measurements and analysis for L1--L5 in Appendix~E.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -507,7 +517,7 @@ A closing thought. The agents in this paper get faster not by thinking faster bu
 \section*{Reproducibility}
 \label{sec:reproducibility}
 
-\textbf{Code.} The PreAct harness, multi-seed run scripts, and the patched Android container endpoint (\texttt{android\_server\_patched.py}; see Appendix~D) are released at \url{https://github.com/bojieli/PreAct}. Algorithm~\ref{alg:harness} is implemented in \texttt{preact/cli.py} (top-level loop), \texttt{preact/executor/} (state-machine replayer), \texttt{preact/generator/} (compiler), and \texttt{preact/rag/} (corpus + selector). All env-var ablation knobs used in this paper are documented in the repo README: \texttt{PREACT\_VERIFY\_GATE}, \texttt{PREACT\_GUARDRAILS}, \texttt{PREACT\_SELECTOR\_MODE}, \texttt{PREACT\_COMPILE\_PROVIDER}, \texttt{PREACT\_RUNTIME\_MODE}, \texttt{PREACT\_LLM\_PROVIDER}, and \texttt{RAG\_DB\_PATH}.
+\textbf{Code.} The PreAct harness, multi-seed run scripts, and the patched Android container endpoint (\texttt{android\_server\_patched.py}; see Appendix~C) are released at \url{https://github.com/bojieli/PreAct}. Algorithm~\ref{alg:harness} is implemented in \texttt{preact/cli.py} (top-level loop), \texttt{preact/executor/} (state-machine replayer), \texttt{preact/generator/} (compiler), and \texttt{preact/rag/} (corpus + selector). All env-var ablation knobs used in this paper are documented in the repo README: \texttt{PREACT\_VERIFY\_GATE}, \texttt{PREACT\_GUARDRAILS}, \texttt{PREACT\_SELECTOR\_MODE}, \texttt{PREACT\_COMPILE\_PROVIDER}, \texttt{PREACT\_RUNTIME\_MODE}, \texttt{PREACT\_LLM\_PROVIDER}, and \texttt{RAG\_DB\_PATH}.
 
 \textbf{Data.} Per-seed rag\_db snapshots for each cold and warm run (Tables~\ref{tab:monotonic}, \ref{tab:gate-android}, \ref{tab:gate-osworld}, \ref{tab:guardrails}) are preserved under \texttt{rag\_db\_*} directories named after the experiment and seed; raw run logs (\texttt{*.log}) record per-task pass/fail, replay coverage, and gate-rejection events. The \texttt{paper/findings\_summary.md} file in the repo contains the exhaustive per-task tables underlying every aggregate number in this paper.
 
@@ -517,64 +527,7 @@ A closing thought. The agents in this paper get faster not by thinking faster bu
 \bibliography{references}
 
 \appendix
-\section*{Appendix A. Concrete Program Example}
-\label{sec:program}
-
-This is the verbatim program behind Listing~\ref{lst:contact} and Figure~\ref{fig:program-graph}, taken directly from the corpus (program \texttt{ab4390a9}), compiled while the agent ran the \texttt{ContactsAddContact} task from the AndroidWorld benchmark~\cite{rawles2024androidworld}. Only the schema-default \texttt{null} fields of each action object are omitted; everything else---state ids, verification predicates with their timeouts, per-state descriptions, and the full resource-id selectors---is reproduced exactly.
-
-\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,language={}]
-{
-  "metadata": {
-    "program_id": "ab4390a9-1902-47a1-821b-ebddc7f4010a",
-    "task_description": "Create a new contact for Emilia Gonzalez. Their number is +14240925675.",
-    "application_context": "com.google.android.contacts",
-    "parameters": ["first_name", "last_name", "phone_number"]
-  },
-  "states": [
-    { "id": "contacts_app_open",
-      "verification": {"type": "expect_element", "xpath": "resource_id=com.google.android.contacts:id/floating_action_button", "timeout_ms": 5000},
-      "description": "Contacts app is open showing the main list with the Create-Contact FAB visible" },
-    { "id": "create_contact_form",
-      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=First name", "timeout_ms": 3000},
-      "description": "New-contact creation form is open with the First name field visible" },
-    { "id": "first_name_entered",
-      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=Last name", "timeout_ms": 2000},
-      "description": "First name has been entered; Last name field is available" },
-    { "id": "last_name_entered",
-      "verification": {"type": "expect_element", "xpath": "class=android.widget.EditText&&hint=Phone", "timeout_ms": 2000},
-      "description": "Last name has been entered; Phone field is available" },
-    { "id": "phone_entered",
-      "verification": {"type": "expect_element", "xpath": "resource_id=android:id/text1&&text=Mobile", "timeout_ms": 2000},
-      "description": "Phone number has been entered; phone-type selector (Mobile) is visible" },
-    { "id": "phone_type_selected",
-      "verification": {"type": "expect_element", "xpath": "resource_id=com.google.android.contacts:id/toolbar_button&&text=Save", "timeout_ms": 2000},
-      "description": "Phone type Mobile selected; Save button is visible in the toolbar" },
-    { "id": "contact_saved",
-      "verification": {"type": "terminal_state", "timeout_ms": 5000},
-      "description": "Contact has been saved successfully and the task is complete" }
-  ],
-  "transitions": [
-    { "from_state": "contacts_app_open", "to_state": "create_contact_form",
-      "action": {"type": "action_navigate", "text": "Contacts"} },
-    { "from_state": "contacts_app_open", "to_state": "create_contact_form",
-      "action": {"type": "action_click", "target": "resource_id=com.google.android.contacts:id/floating_action_button"} },
-    { "from_state": "create_contact_form", "to_state": "first_name_entered",
-      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=First name", "parameter_name": "first_name"} },
-    { "from_state": "first_name_entered", "to_state": "last_name_entered",
-      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=Last name", "parameter_name": "last_name"} },
-    { "from_state": "last_name_entered", "to_state": "phone_entered",
-      "action": {"type": "action_type", "target": "class=android.widget.EditText&&hint=Phone", "parameter_name": "phone_number"} },
-    { "from_state": "phone_entered", "to_state": "phone_type_selected",
-      "action": {"type": "action_click", "target": "resource_id=android:id/text1&&text=Mobile"} },
-    { "from_state": "phone_type_selected", "to_state": "contact_saved",
-      "action": {"type": "action_click", "target": "resource_id=com.google.android.contacts:id/toolbar_button&&text=Save"} }
-  ]
-}
-\end{lstlisting}
-
-Each state's verification predicate is an accessibility-tree pattern that must hold on the live UI; replay halts and falls through to CUA if a predicate fails. The three values typed during the trace are recorded as the parameters \texttt{first\_name}, \texttt{last\_name}, \texttt{phone\_number} and re-bound to new values on every retrieval, so the one program generalizes across contacts. The two transitions out of \texttt{contacts\_app\_open} (an \texttt{action\_navigate} that opens Contacts and the \texttt{action\_click} on the create button) are a small redundancy the compiler emitted and the replayer tolerates; both reach \texttt{create\_contact\_form}. This program is tree-like, but tasks with delete-confirmation dialogs or version-dependent navigation compile into graphs with several outgoing transitions per state, where the state's verification predicate selects the active branch.
-
-\section*{Appendix B. Computer-Action Schema}
+\section*{Appendix A. Computer-Action Schema}
 
 Each transition's \texttt{action} field must be one of the action types in Table~\ref{tab:actions}. Action types are translated to platform-specific backends at execution time: \texttt{action\_click} on Android maps to a \texttt{JSONAction}-formatted touch with the resolved element's $(x, y)$ coordinates; on OSWorld it maps to \texttt{pyautogui.click(x, y)}. The cross-platform schema enables the same compiled state-machine program to run on either backend, although in practice each task's compile is platform-specific because the verification predicates use platform-specific selector dialects (Android XPath vs.\ pyautogui screenshot regions).
 
@@ -605,7 +558,7 @@ Action type & Description and required fields \\
 
 The \texttt{description} field on each transition (one short sentence) is consumed by the agentic Program Selector (\S\ref{sec:arch}) when judging whether a stored program applies to the current task. Selectors are written to be parameter-aware (e.g.\ ``type the filename (parameter \texttt{filename})'' rather than ``type text''), since the program's \texttt{parameters} list is what the LLM uses to bind the program's slots to the new task's instance values at retrieval time.
 
-\section*{Appendix C. Per-Seed and Per-Task Multi-Seed Data}
+\section*{Appendix B. Per-Seed and Per-Task Multi-Seed Data}
 
 This appendix gives the per-seed and per-rep detail behind the aggregate figures in \S\ref{sec:eval-monotonic} (Figure~\ref{fig:monotonic}) and \S\ref{sec:eval-gate} (Table~\ref{tab:gate}, Figure~\ref{fig:diff}).
 
@@ -701,10 +654,10 @@ Total & 11/15 & 11/15 & 10/15 \\
 
 The complete per-task results across all 32 Android multi-seed runs and 8 OSWorld runs are also available in the project's \texttt{paper/findings\_summary.md}.
 
-\section*{Appendix D. Container Patch}
+\section*{Appendix C. Container Patch}
 The \texttt{android\_server\_patched.py} adds a \texttt{/state} endpoint to \texttt{huggingface/android\_world:latest} that returns base64-encoded screenshots plus serialized accessibility-tree elements, sidestepping the upstream populated-AVD a11y-gRPC initialization wedge.
 
-\section*{Appendix E. Out-of-Distribution Generalization (Details)}
+\section*{Appendix D. Out-of-Distribution Generalization (Details)}
 \label{sec:appendix-ood}
 
 To test whether the corpus transfers beyond seen tasks, we built a rag\_db from the OSWorld test\_tiny set (6 tasks across Chrome, LibreOffice Calc, LibreOffice Writer; 4 verify-gate-stored programs after compile filtering) and ran on \texttt{test\_small\_ood.json}: the 33 OSWorld test\_small tasks that are \emph{not} in test\_tiny, spanning 9 domains (chrome$\times$2, gimp$\times$2, libreoffice\_calc$\times$1, libreoffice\_impress$\times$2, multi\_apps$\times$17, os$\times$2, thunderbird$\times$2, vlc$\times$2, vs\_code$\times$3). The agentic Program Selector retrieves from the test\_tiny corpus when the new task's description plausibly matches.
@@ -713,7 +666,7 @@ Result at $n{=}3$ reps (rag\_db copy reset per rep): warm-OOD $21/30$, $15/30$, 
 
 The corpus does not transfer cleanly across task families. Inspecting the rep logs: the selector retrieves a near-miss program (a test\_tiny Chrome history-clean program retrieved for a Thunderbird email task whose intent shares lexical surface with ``clean'') on $\sim 6/30$ queries per rep on average; the source-domain XPath/state predicates then fail on the OOD page, consuming replay budget that the harness can no longer recover within the per-task wall budget. The remaining $\sim 24/30$ OOD queries are handled correctly by the selector returning ``no candidate''---these run as pure CUA and approximately match cold-OOD on their own---so the aggregate $11$\,pp regression is concentrated in the small fraction of mis-routed retrievals. \emph{The corpus is not neutral on OOD; it is mildly harmful.} This sharpens the scope of the self-extending corpus claim: corpora built on small in-distribution task subsets should not be deployed cross-domain without retraining the selector or extending the corpus to cover the new domain.
 
-\section*{Appendix F. Limitations (Extended)}
+\section*{Appendix E. Limitations (Extended)}
 \label{sec:appendix-limitations}
 
 \textbf{(L1) Architectural baseline.} We ran an ActionEngine-style flat-script baseline at $n{=}5$ Android seeds (Table~\ref{tab:arch-ab}) by gating per-state verification under a \texttt{PREACT\_RUNTIME\_MODE=flat\_script} env var. Flat-script mean (warm) is $10.6 \pm 1.14$ across seeds 42/100/1337/7/2025, vs.\ state-machine $11.67 \pm 0.58$ on the matched 3 seeds; the matched-seed $\Delta = +0.67$ tasks in favor of state-machine, sign-test $p = 0.125$ on $n{=}3$ paired comparisons (suggestive but not significant). The architectural commitment matters but is a smaller effect than the verify-gate's 1.75--2.6-task diff-of-deltas, consistent with the paper's framing that the gate is the bigger empirical contribution. We did not run an untargeted-exploration baseline. The Gemini-vs-Claude compile-LLM concern previously flagged here is now closed at $n{=}3$ (\S\ref{sec:eval-compile-llm}).
@@ -735,7 +688,7 @@ The corpus does not transfer cleanly across task families. Inspecting the rep lo
 
 To stress-test the selector beyond verbatim retrieval, we ran a paraphrase-robustness audit: for each of 15 stored Android programs, we generated 3 LLM-rewritten paraphrases (45 paraphrased queries total) and measured whether the selector still picked the original program. Result: 21/45 = 47\% exact-id, 13/45 = 29\% same-task-different-id (paraphrase picked an equivalent program), 11/45 = 24\% no-pick (selector returned ``no candidate''), and \textbf{0/45 = 0\% wrong-task-family} (selector never picked an unrelated program). \emph{Functional accuracy} (exact + equivalent) is 75.6\% (34/45); the no-pick fraction is conservative behavior (the selector errs toward CUA fallback rather than retrieving an inapplicable program). At 75.6\% functional retrieval and 0\% mis-retrieval, the selector is conservative-by-design rather than over-eager.
 
-\section*{Appendix G. Negative-Findings Tables}
+\section*{Appendix F. Negative-Findings Tables}
 \label{sec:appendix-negative-tables}
 \label{sec:eval-selector-ablation}
 
@@ -769,7 +722,7 @@ The interpretation: the hypothesis we entered with---``embedding-RAG is inferior
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.46\linewidth]{fig_guardrails.pdf}
+\includegraphics[width=0.60\linewidth]{fig_guardrails.pdf}
 \caption{Runtime guardrails are aggregate-neutral. Cold means are identical with and without guardrails ($10.2 = 10.2$); the warm gap ($+0.4$) is well within seed variance. Detail in Table~\ref{tab:guardrails}.}
 \label{fig:guardrails}
 \end{figure}
@@ -795,7 +748,7 @@ Seed & Cold ON & Warm ON & $\Delta$ ON & Cold OFF & Warm OFF & $\Delta$ OFF \\
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.45\linewidth]{fig_arch_ab.pdf}
+\includegraphics[width=0.58\linewidth]{fig_arch_ab.pdf}
 \caption{State-machine vs.\ flat-script runtime (warm SR, AndroidWorld official-15). The verified graph form helps by a small, consistent margin ($+0.67$ tasks, all three matched seeds non-regressive, $p=0.125$)---real but far smaller than the gate's $1.75$--$2.6$ tasks.}
 \label{fig:arch-ab}
 \end{figure}
@@ -818,7 +771,7 @@ $\Delta$ (matched) & +1 & 0 & +1 & --- & --- & \textbf{+0.67 (matched $n{=}3$)} 
 \end{tabular}
 \end{table}
 
-\section*{Appendix H. Smoking-Gun Reproducibility (Per-Program)}
+\section*{Appendix G. Smoking-Gun Reproducibility (Per-Program)}
 \label{sec:appendix-smoking-gun-rep}
 
 The five smoking-gun cov$=$100\%/score$=$0 cases (Table~\ref{tab:smoking-gun}) are not equally reproducible across reps. Table~\ref{tab:smoking-gun-rep} reports the per-program reproducibility across the 5 OSWorld warm-OFF reps.
@@ -841,7 +794,7 @@ c1f04f87 & LibreOffice Calc chart & 4/5 (rep2 hybrid-rescued) \\
 
 The mechanism is partially deterministic. For the most reliable case (Calc formula 43188217), the lossy program reproducibly fails at cov$=$100\% on every warm rep. For Calc chart c1f04f87, hybrid-mode rescue occasionally salvaged the run via CUA fallback after partial replay (cov$=$8\%). For Chrome history 8f0fdfa4, the cold-stored program's mechanical action sequence happened to match the evaluator's required browser state on 3 of 5 reps---a partial-determinism that traces to environmental factors (Chrome's session state, browsing history initialization) varying across DesktopEnv resets even with identical task IDs.
 
-\section*{Appendix I. Validity-Threat Closure Map}
+\section*{Appendix H. Validity-Threat Closure Map}
 \label{sec:appendix-threats}
 
 Table~\ref{tab:gap-closure} maps each validity threat---the original nine from our pre-experiment validation plan, plus three added since the May 2026 revision---to its closure status and the experiment that closes it. Eleven of the twelve are in scope and closed at multi-seed rigor; threat~8 (platform coverage) is out of scope as it would require net-new benchmarks.

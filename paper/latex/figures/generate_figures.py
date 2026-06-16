@@ -158,58 +158,56 @@ def fig_landscape():
 # ====================================================================== Fig 3
 def fig_program_graph():
     """The real compiled 'add a contact' program (program ab4390a9) as a
-    vertical state machine: state id + verification predicate per box, action
-    on each transition. Matches Listing 1 exactly."""
-    # (state id, predicate summary, action onto the NEXT state or None)
-    rows = [
-        ("contacts_app_open",   "'+' create button visible",
-         "tap  '+'  (create contact)"),
-        ("create_contact_form", "First-name field shown",
-         "type  first_name"),
-        ("first_name_entered",  "Last-name field shown",
-         "type  last_name"),
-        ("last_name_entered",   "Phone field shown",
-         "type  phone_number"),
-        ("phone_entered",       "'Mobile' label shown",
-         "tap  'Mobile'"),
-        ("phone_type_selected", "'Save' button shown",
-         "tap  'Save'"),
-        ("contact_saved",       "terminal -- contact written", None),
-    ]
-    n = len(rows)
-    BW, BH = 5.4, 1.16
-    gap = 0.62
-    x0 = 1.1
-    top = 0.4
-    H = n * BH + (n - 1) * gap + 1.1
-    fig, ax = plt.subplots(figsize=(5.7, 1.16 * n + 1.4))
-    ax.set_xlim(0, 8.0); ax.set_ylim(0, H); ax.axis("off")
+    compact two-row (snake) state machine: 4 states top L->R, 3 bottom R->L.
+    Box = state id (wrapped); action on each arrow; predicates are in Listing 1.
+    Wide-and-short so it includes near full width with a legible font."""
+    ids = ["contacts\n_app_open", "create\n_contact_form", "first_name\n_entered",
+           "last_name\n_entered", "phone\n_entered", "phone_type\n_selected",
+           "contact\n_saved"]
+    acts = ["tap '+'", "type first_name", "type last_name",
+            "type phone_number", "tap 'Mobile'", "tap 'Save'"]
+    BW, BH = 3.7, 1.15
+    PX = 4.4                       # column pitch
+    x0 = 0.3
+    yA, yB = 2.9, 0.7              # top-row / bottom-row box bottoms
 
-    def yof(i):  # box bottom y, top row highest
-        return H - top - BH - i * (BH + gap)
+    def rc(i):
+        return (0, i) if i < 4 else (1, 3 - (i - 4))
+    def bx(i):
+        return x0 + rc(i)[1] * PX
+    def by(i):
+        return yA if rc(i)[0] == 0 else yB
 
-    for i, (sid, pred, act) in enumerate(rows):
-        yb = yof(i)
-        term = (i == n - 1)
-        ax.add_patch(FancyBboxPatch((x0, yb), BW, BH,
+    W = x0 + 3 * PX + BW + 0.3
+    fig, ax = plt.subplots(figsize=(7.6, 7.6 * (5.0 / W)))
+    ax.set_xlim(0, W); ax.set_ylim(0, 5.0); ax.set_aspect("equal")
+    ax.axis("off")
+
+    for i, lab in enumerate(ids):
+        x, y = bx(i), by(i); term = (i == len(ids) - 1)
+        ax.add_patch(FancyBboxPatch((x, y), BW, BH,
                      boxstyle="round,pad=0.02,rounding_size=0.10",
                      fc="#FBF1DD" if term else INKBOX,
-                     ec=GOLD if term else ACCENT, lw=1.3))
-        ax.text(x0 + 0.3, yb + BH * 0.66, sid, ha="left", va="center",
+                     ec=GOLD if term else ACCENT, lw=1.4))
+        ax.text(x + BW / 2, y + BH / 2, lab, ha="center", va="center",
                 fontsize=10, fontweight="bold", color=GOLD if term else ACCENT)
-        ax.text(x0 + 0.3, yb + BH * 0.28,
-                ("" if term else r"$\models$  ") + pred, ha="left",
-                va="center", fontsize=8.0, color=GRAY, style="italic")
-        if act is not None:
-            ytop_next = yof(i + 1) + BH
-            arrow(ax, (x0 + BW / 2, yb), (x0 + BW / 2, ytop_next),
-                  color=ACCENT, lw=1.7)
-            ax.text(x0 + BW / 2 + 0.25, (yb + ytop_next) / 2, act, ha="left",
-                    va="center", fontsize=8.2, color=ACCENT)
-    ax.text(x0, 0.18, "State boxes hold a verification predicate "
-            r"($\models$); arrows hold an action. "
-            "first_name, last_name, phone_number are parameters.",
-            fontsize=7.6, color=GRAY, style="italic")
+
+    for i, act in enumerate(acts):
+        (rf, cf), (rt, ct) = rc(i), rc(i + 1)
+        ymf = by(i) + BH / 2
+        if rf == rt and cf < ct:                       # rightward (top row)
+            arrow(ax, (bx(i) + BW, ymf), (bx(i + 1), ymf), color=ACCENT, lw=1.8)
+            ax.text((bx(i) + BW + bx(i + 1)) / 2, by(i) + BH + 0.28, act,
+                    ha="center", va="bottom", fontsize=9.5, color=ACCENT)
+        elif rf == rt and cf > ct:                     # leftward (bottom row)
+            arrow(ax, (bx(i), ymf), (bx(i + 1) + BW, ymf), color=ACCENT, lw=1.8)
+            ax.text((bx(i) + bx(i + 1) + BW) / 2, by(i) - 0.28, act,
+                    ha="center", va="top", fontsize=9.5, color=ACCENT)
+        else:                                          # down (col 3)
+            xm = bx(i) + BW / 2
+            arrow(ax, (xm, by(i)), (xm, by(i + 1) + BH), color=ACCENT, lw=1.8)
+            ax.text(xm - 0.35, (by(i) + by(i + 1) + BH) / 2, act, ha="right",
+                    va="center", fontsize=9.5, color=ACCENT)
     save(fig, "fig_program_graph")
 
 
@@ -231,7 +229,7 @@ def fig_architecture():
     box(0.2, TOP, 2.0, "User\ngoal  T")
     box(3.0, TOP, 2.2, "Program\nSelector")
     box(6.2, TOP, 2.4, "State-machine\nReplayer")
-    box(6.2, BOT, 2.6, "CUA fallback\n(T3A / Claude-CU)", fc="#FDEFEF", ec=BAD)
+    box(6.2, BOT, 2.6, "CUA\nfallback", fc="#FDEFEF", ec=BAD)
     box(9.8, BOT, 2.0, "Compiler")
     box(9.6, TOP, 2.3, "Verify-before-\nStore Gate", fc="#FDEFEF", ec=BAD)
     box(12.7, TOP, 2.1, "Program\nCorpus", fc="#FBF1DD", ec=GOLD)
@@ -282,12 +280,12 @@ def fig_daytimeline():
             ha="center")
     # Day 2 lane
     ax.text(0.1, 1.45, "Day 2", fontweight="bold", color=INK, fontsize=10)
-    rbox(ax, 1.4, 0.9, 5.6, 0.8, "replay the program (walk the graph)",
-         fc=ACCENT, ec="white", fs=8.6, tc="white", bold=True)
+    rbox(ax, 1.4, 0.9, 3.8, 0.8, "replay the program",
+         fc=ACCENT, ec="white", fs=10, tc="white", bold=True)
     ax.text(1.4, 0.6, "0 LLM calls · 8.5–13× faster · verified before stored",
             fontsize=8, color=ACCENT, va="top")
-    arrow(ax, (7.1, 1.3), (8.1, 1.3), color=GREEN, lw=1.6)
-    rbox(ax, 8.2, 0.9, 1.7, 0.8, "done", fc="#E8F2EC", ec=GREEN, fs=9,
+    arrow(ax, (5.3, 1.3), (6.3, 1.3), color=GREEN, lw=1.6)
+    rbox(ax, 6.4, 0.9, 1.7, 0.8, "done", fc="#E8F2EC", ec=GREEN, fs=9,
          tc=GREEN, bold=True)
     save(fig, "fig_daytimeline")
 
@@ -327,17 +325,13 @@ def fig_gatecost():
                 label="verify-replay (gate, one-time)", edgecolor="white",
                 lw=1.0)
     for xs, v in zip(xx - w / 2, solve):
-        ax.text(xs, v + 2, f"{v}s", ha="center", fontsize=8.5)
+        ax.text(xs, v + 3, f"{v}s", ha="center", fontsize=10)
     for xs, v in zip(xx + w / 2, verify):
-        ax.text(xs, v + 2, f"{v}s", ha="center", fontsize=8.5)
-    ax.text(0, 150, "+162%", ha="center", color=GOLD, fontsize=8.5,
-            fontweight="bold")
-    ax.text(1, 150, "+217%", ha="center", color=GOLD, fontsize=8.5,
-            fontweight="bold")
+        ax.text(xs, v + 3, f"{v}s", ha="center", fontsize=10)
     ax.set_xticks(xx); ax.set_xticklabels(plats)
     ax.set_ylabel("Median wall time per task (s)")
-    ax.set_ylim(0, 165)
-    ax.legend(frameon=False, fontsize=8.5, loc="upper left")
+    ax.set_ylim(0, 175)
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
     save(fig, "fig_gatecost")
 
 
@@ -503,12 +497,14 @@ def fig_ood():
     for x, v in zip([0, 1, 2], reps):
         ax.text(x, v + 0.4, f"{v}", ha="center", fontsize=9)
     ax.axhline(16.7, color=ACCENT, lw=2.0, ls="-")
-    ax.text(2.45, 16.7, "warm mean 16.7", color=ACCENT, fontsize=8.5,
-            va="center")
+    ax.text(3.3, 16.7 + 0.45, "warm mean = 16.7", color=ACCENT, fontsize=8.5,
+            ha="right", va="bottom",
+            bbox=dict(fc="white", ec="none", pad=0.6))
     ax.axhline(20, color=BAD, lw=2.0, ls="--")
-    ax.text(2.45, 20.4, "cold-OOD ≈20", color=BAD, fontsize=8.5, va="center")
+    ax.text(3.3, 20 + 0.45, "cold-OOD ≈ 20", color=BAD, fontsize=8.5,
+            ha="right", va="bottom", bbox=dict(fc="white", ec="none", pad=0.6))
     ax.fill_between([-0.5, 2.5], 16.7, 20, color=BAD, alpha=0.08)
-    ax.text(0.0, 18.3, "≈11 pp headwind", color=BAD, fontsize=8,
+    ax.text(0.1, 18.35, "≈11 pp headwind", color=BAD, fontsize=8,
             style="italic")
     ax.set_xticks([0, 1, 2]); ax.set_xticklabels(["rep 1", "rep 2", "rep 3"])
     ax.set_ylabel("Tasks solved (of 30 OOD)"); ax.set_ylim(0, 26)
@@ -529,15 +525,12 @@ def fig_guardrails():
     ax.bar(xx + w / 2, off, w, color=ACC_LT, label="guardrails OFF",
            edgecolor="white", lw=1.0)
     for xs, v in zip(xx - w / 2, on):
-        ax.text(xs, v + 0.08, f"{v}", ha="center", fontsize=8.5)
+        ax.text(xs, v + 0.08, f"{v}", ha="center", fontsize=10)
     for xs, v in zip(xx + w / 2, off):
-        ax.text(xs, v + 0.08, f"{v}", ha="center", fontsize=8.5)
-    ax.annotate("cold means identical", xy=(0, 10.2), xytext=(0.0, 8.7),
-                ha="center", fontsize=8, color=GRAY,
-                arrowprops=dict(arrowstyle="-|>", color=GRAY, lw=0.8))
+        ax.text(xs, v + 0.08, f"{v}", ha="center", fontsize=10)
     ax.set_xticks(xx); ax.set_xticklabels(groups)
     ax.set_ylabel("Tasks solved (of 15)"); ax.set_ylim(8, 12)
-    ax.legend(frameon=False, fontsize=8.5, loc="upper left")
+    ax.legend(frameon=False, fontsize=9.5, loc="upper left")
     save(fig, "fig_guardrails")
 
 
@@ -573,8 +566,7 @@ def fig_arch_ab():
     ax.bar([0, 1], means, 0.5, yerr=errs, capsize=5, color=[ACCENT, GRAY],
            edgecolor="white", lw=1.0, error_kw=dict(ecolor=INK, lw=1.1))
     for x, v in zip([0, 1], means):
-        ax.text(x, v + 0.12, f"{v}", ha="center", fontsize=9)
-    ax.text(0.5, 11.9, "+0.67 (p=0.125)", ha="center", fontsize=8, color=GRAY)
+        ax.text(x, v + 0.14, f"{v}", ha="center", fontsize=10)
     ax.set_xticks([0, 1]); ax.set_xticklabels(modes)
     ax.set_ylabel("Warm tasks solved (of 15)"); ax.set_ylim(9, 12.6)
     save(fig, "fig_arch_ab")
