@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import Reveal from './Reveal'
-import PhoneFrame from './PhoneFrame'
-import { EXAMPLE_PROGRAM } from '../data/architecture'
-import { TRAJECTORIES } from '../data/trajectories'
+import Reveal from '../../components/Reveal'
+import PhoneFrame from '../../components/PhoneFrame'
+import { EXAMPLE_PROGRAM } from '../../data/architecture'
+import { TRAJECTORIES } from '../../data/trajectories'
 import './Demo.css'
 
 // Real screenshots from the actual "add a contact" run, one per program state
@@ -98,12 +98,13 @@ export default function Demo() {
     <section id="demo">
       <div className="shell">
         <Reveal className="section-head">
-          <span className="divider-num">§ INTERACTIVE — TRY IT</span>
-          <h2>Run a real program, step by step.</h2>
+          <span className="divider-num">§ THE CHECK — WHY REUSE IS SAFE</span>
+          <h2>A program is kept only if it really worked.</h2>
           <p>
-            This is an actual saved program for the “add a contact” task. Choose what happens when
-            it runs, press replay, and watch how the check decides whether the program is good
-            enough to keep.
+            A saved program can run all the way to its last step and still not do the job — the
+            contact is never actually created. So before keeping one, the agent re-runs it from a
+            clean start and confirms the task was truly done. Choose what happens and replay it on
+            the real phone.
           </p>
         </Reveal>
 

@@ -1,4 +1,4 @@
-import Reveal from './Reveal'
+import Reveal from '../../components/Reveal'
 import './Footer.css'
 
 export default function Footer() {
@@ -46,9 +46,8 @@ export default function Footer() {
             <span className="mono">PreAct · Pine AI · 2026</span>
           </div>
           <nav className="footer__nav mono">
-            <a href="#architecture">How it works</a>
-            <a href="#demo">Try it</a>
-            <a href="#corpus">Programs</a>
+            <a href="#programs">Programs</a>
+            <a href="#demo">The check</a>
             <a href="#results">Results</a>
           </nav>
         </div>

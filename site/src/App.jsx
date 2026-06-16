@@ -1,12 +1,10 @@
-import Nav from './components/Nav'
-import Hero from './components/Hero'
-import Problem from './components/Problem'
-import Architecture from './components/Architecture'
-import Demo from './components/Demo'
-import Corpus from './components/Corpus'
-import Trajectories from './components/Trajectories'
-import Results from './components/Results'
-import Footer from './components/Footer'
+import Nav from './layout/Nav/Nav'
+import Hero from './sections/Hero/Hero'
+import Problem from './sections/Problem/Problem'
+import Trajectories from './sections/Trajectories/Trajectories'
+import Demo from './sections/Demo/Demo'
+import Results from './sections/Results/Results'
+import Footer from './layout/Footer/Footer'
 
 export default function App() {
   return (
@@ -15,10 +13,8 @@ export default function App() {
       <main>
         <Hero />
         <Problem />
-        <Architecture />
-        <Demo />
-        <Corpus />
         <Trajectories />
+        <Demo />
         <Results />
       </main>
       <Footer />

@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { HEADLINES } from '../data/results'
+import { HEADLINES } from '../../data/results'
 import HeroGraph from './HeroGraph'
 import './Hero.css'
 
@@ -38,8 +38,8 @@ export default function Hero() {
           </motion.div>
 
           <motion.div variants={item} className="hero__cta">
-            <a href="#architecture" className="btn btn-primary">See how it works →</a>
-            <a href="#corpus" className="btn">Browse real programs</a>
+            <a href="#programs" className="btn btn-primary">Watch a real run →</a>
+            <a href="#demo" className="btn">See the check</a>
           </motion.div>
 
           <motion.div variants={item} className="hero__stats">

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import Reveal from './Reveal'
-import GateChart from './charts/GateChart'
+import Reveal from '../../components/Reveal'
+import GateChart from './GateChart'
 import {
   GATE_ANDROID, GATE_OSWORLD, MONOTONIC, BASELINES, SMOKING_GUN,
   SELECTOR_ABLATION, NEGATIVE_FINDINGS, THREATS, CROSS_MODEL,
-} from '../data/results'
+} from '../../data/results'
 import './Results.css'
 
 export default function Results() {

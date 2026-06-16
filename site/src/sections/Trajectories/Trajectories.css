@@ -1,0 +1,124 @@
+/* ===== Programs the agent learned — program steps (left) + real screen (right) ===== */
+
+.prog__tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.prog__task {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  transition: all 0.16s var(--ease);
+}
+.prog__task:hover { border-color: var(--line-strong); color: var(--ink); }
+.prog__task.is-active {
+  background: var(--replay-glow);
+  border-color: var(--replay);
+  color: var(--ink);
+}
+
+.prog__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) auto;
+  gap: 26px;
+  align-items: start;
+}
+
+/* left — the program */
+.prog__panel { padding: 18px 20px; }
+.prog__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.prog__run { white-space: nowrap; }
+.prog__goal {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding-bottom: 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.prog__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.prog__step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: var(--ink-mute);
+  transition: all 0.16s var(--ease);
+}
+.prog__step:hover { background: var(--panel-2); }
+.prog__step.is-done { color: var(--ink-soft); }
+.prog__step.is-cur {
+  background: var(--replay-glow);
+  border-color: var(--replay);
+  color: var(--ink);
+}
+.prog__step-tick {
+  width: 18px;
+  flex: none;
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 0.9rem;
+}
+.prog__step.is-done .prog__step-tick { color: var(--pass); }
+.prog__step.is-cur .prog__step-tick { color: var(--replay); }
+.prog__step-act { flex: 1; font-size: 0.92rem; line-height: 1.35; }
+.prog__step-n { color: var(--ink-mute); font-size: 0.72rem; flex: none; }
+
+/* right — the phone screen */
+.prog__screen { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.prog__screen-meta { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 244px; }
+.prog__nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  justify-content: center;
+}
+.prog__nav-action {
+  flex: 1;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--replay);
+  font-weight: 500;
+  min-height: 1.3em;
+}
+.prog__ctrl {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  flex: none;
+}
+.prog__ctrl:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
+.prog__ctrl:disabled { opacity: 0.3; cursor: default; }
+
+.prog__foot { margin-top: 22px; font-size: 0.85rem; text-align: center; }
+
+@media (max-width: 860px) {
+  .prog__stage { grid-template-columns: 1fr; justify-items: center; }
+  .prog__panel { width: 100%; order: 2; }
+  .prog__screen { order: 1; }
+}

@@ -3,10 +3,8 @@ import './Nav.css'
 
 const LINKS = [
   ['problem', 'Problem'],
-  ['architecture', 'How it works'],
-  ['demo', 'Try it'],
-  ['corpus', 'Programs'],
-  ['trajectories', 'Real runs'],
+  ['programs', 'Programs'],
+  ['demo', 'The check'],
   ['results', 'Results'],
 ]
 

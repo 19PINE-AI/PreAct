@@ -1,4 +1,4 @@
-import Reveal from './Reveal'
+import Reveal from '../../components/Reveal'
 import './Problem.css'
 
 const RELATED = [
