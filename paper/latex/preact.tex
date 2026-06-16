@@ -29,7 +29,7 @@ PreAct applies the same discipline when deciding what to keep: a freshly compile
 
 \begin{center}
 \small
-Code: \url{https://github.com/bojieli/PreAct} \\[2pt]
+Code: \url{https://github.com/19PINE-AI/PreAct} \\[2pt]
 Website: \url{https://01.me/research/PreAct/}
 \end{center}
 \vspace{-0.6em}
@@ -454,7 +454,7 @@ Per-seed tables for these negative ablations are in Appendix~F, and a complete m
 \section{Discussion}
 \label{sec:discussion}
 
-\subsection{Why the Gate Matters}
+\subsection{Why the Verify-Gate Matters}
 
 The mechanism is: the verify-gate filters lossy compiles before they enter the corpus. ``Lossy'' here means: action sequences that are mechanically faithful (cov=100\% on replay) but do not produce the live evaluator's required end state. Without the gate, every CUA-success-then-compile cycle adds a new program to the corpus regardless of whether that program actually achieves the goal under deterministic re-execution. With the gate, only programs that have independently re-passed enter the corpus.
 
@@ -531,9 +531,9 @@ Four directions stand out.
 \section{Conclusion}
 \label{sec:conclusion}
 
-PreAct started from a simple observation: a computer-using agent should not re-derive a task it has already solved. Acting on it took two commitments. The first is about representation---what the agent remembers is a state-machine program it can run directly, not a transcript it has to re-interpret. The second is about discipline---the agent never trusts a remembered program until it has re-run it from a clean state and confirmed that the program still reaches the goal. Across three different platforms, these two ideas together let an agent get faster on repeated work while keeping its growing memory honest. The pieces we had expected to matter mostly did not: the runtime guardrails left the aggregate numbers unchanged, the prompt-level guidance was never exercised in production, and a small embedding retriever did as well as the agentic LLM selector. What carried the result was the pairing itself---an executable memory together with the refusal to keep anything unverified.
+PreAct started from a simple observation: a computer-using agent should not re-derive a task it has already solved. Acting on it took two commitments. The first is about representation---what the agent remembers is a state-machine program it can run directly, not a transcript it has to re-interpret. The second is about discipline---the agent checks against the live screen before it trusts anything: before each action as it replays a program, and once more over the whole program, re-run from a clean state, before that program is allowed into its memory. Across three different platforms, these two ideas together let an agent get faster on repeated work while keeping its growing memory honest. The pieces we had expected to matter mostly did not: the runtime guardrails left the aggregate numbers unchanged, the prompt-level guidance was never exercised in production, and a small embedding retriever did as well as the agentic LLM selector. What carried the result was the pairing itself---an executable memory together with the refusal to keep anything unverified.
 
-That refusal is the easy part to skip and the part that matters most. A memory that grows without verification does not make an agent better over time; it makes the agent repeat the same mistake on every reuse, retrieving a program that looks right, no longer works, and runs to its last step with nothing to show for it. As agents build up larger and longer-lived libraries of skills, the hard question stops being whether an agent can remember what it did and becomes whether it can tell which of its memories are still true. ``Add Emilia Gonzalez'' should take seconds the second time---but only if the agent first checks that the contact is really there.
+That refusal is the easy part to skip and the part that matters most. A memory that grows without verification does not make an agent better over time; it makes the agent repeat the same mistake on every reuse, retrieving a program that looks right, no longer works, and runs to its last step with nothing to show for it. As agents build up larger and longer-lived libraries of skills, the hard question stops being whether an agent can remember what it did and becomes whether it can tell which of its memories are still true.
 
 \section*{Acknowledgements}
 

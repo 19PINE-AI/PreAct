@@ -14,7 +14,7 @@ export default function Footer() {
               Each experiment in the paper can be reproduced by flipping a single setting.
             </p>
             <div className="footer__links">
-              <a className="btn btn-primary" href="https://github.com/bojieli/PreAct" target="_blank" rel="noreferrer">github.com/bojieli/PreAct ↗</a>
+              <a className="btn btn-primary" href="https://github.com/19PINE-AI/PreAct" target="_blank" rel="noreferrer">github.com/19PINE-AI/PreAct ↗</a>
               <a className="btn" href="https://01.me/research/PreAct/" target="_blank" rel="noreferrer">01.me/research/PreAct ↗</a>
             </div>
           </div>
