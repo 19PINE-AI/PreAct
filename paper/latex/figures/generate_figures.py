@@ -118,37 +118,43 @@ def fig_rerun_crisis():
 
 # ====================================================================== Fig 2
 def fig_landscape():
-    """Qualitative positioning of memory-for-CUA systems."""
-    fig, ax = plt.subplots(figsize=(6.6, 4.0))
+    """Qualitative positioning. Axes are the two properties PreAct combines:
+    (x) self-extension/refinement of the store, (y) the stored artifact runs
+    WITHOUT an LLM in the loop. Skill/memory systems self-extend but are
+    LLM-bound at run time; record-replay runs LLM-free but only appends."""
+    fig, ax = plt.subplots(figsize=(6.8, 4.3))
     ax.set_facecolor(PANEL)
     ax.set_xlim(0, 10); ax.set_ylim(0, 10)
-    # quadrant guides
     ax.axhline(5, color=GRID, lw=1.0); ax.axvline(5, color=GRID, lw=1.0)
-    ax.text(9.7, 0.2, "self-extension →", ha="right", fontsize=9, color=GRAY)
-    ax.text(0.2, 9.7, "verified, directly\nexecutable ↑", ha="left", va="top",
-            fontsize=9, color=GRAY)
-    #            name             x    y   label-dx label-dy  ha
+    ax.text(9.85, 0.15, "self-extends / refines its store $\\rightarrow$",
+            ha="right", fontsize=8.5, color=GRAY)
+    ax.text(0.15, 9.85, "artifact runs without an LLM $\\rightarrow$",
+            ha="left", va="top", fontsize=8.5, color=GRAY, rotation=90)
+    # shaded top-right region (PreAct's combination)
+    ax.add_patch(Rectangle((5, 5), 5, 5, color=ACCENT, alpha=0.06, zorder=0))
+    #            name                 x    y   ldx   ldy  ha       color
     pts = [
-        ("Skill systems",  1.6, 3.7,  0.35,  0.0,  "left",   GRAY),
-        ("Workflow-Use",   1.5, 1.6,  0.0,  -0.55, "center", GRAY),
-        ("Muscle-Mem",     3.6, 2.3,  0.0,  -0.55, "center", GRAY),
-        ("AgentRR",        3.5, 4.4,  0.35,  0.0,  "left",   GRAY),
-        ("ActionEngine",   4.3, 6.3,  0.0,  -0.6,  "center", GRAY),
-        ("PreAct",         8.5, 8.6,  0.0,  -0.8,  "center", ACCENT),
+        ("RPA scripts",         1.3, 9.0, 0.0, -0.55, "center", GRAY),
+        ("Muscle-Mem",          3.3, 8.3, 0.0, -0.55, "center", GRAY),
+        ("Workflow-Use",        1.5, 6.9, 0.0, -0.55, "center", GRAY),
+        ("ActionEngine",        2.9, 5.9, 0.0, -0.55, "center", GRAY),
+        ("AgentRR",             3.7, 4.4, 0.0, -0.55, "center", GRAY),
+        ("memory systems\n(Mem0, A-MEM)", 5.6, 4.0, 0.0, -0.5, "center", GRAY),
+        ("Voyager",             8.8, 3.4, 0.0, -0.55, "center", GRAY),
+        ("TroVE",               7.1, 2.3, 0.0, -0.55, "center", GRAY),
+        ("ExpeL",               8.7, 1.2, 0.0, -0.55, "center", GRAY),
+        ("PreAct",              8.5, 8.5, 0.0, -0.7,  "center", ACCENT),
     ]
     for name, x, y, ldx, ldy, lha, col in pts:
         star = (name == "PreAct")
-        ax.scatter([x], [y], s=340 if star else 150, color=col, zorder=3,
+        ax.scatter([x], [y], s=360 if star else 130, color=col, zorder=3,
                    edgecolor="white", lw=1.4, marker="*" if star else "o")
-        ax.text(x + ldx, y + ldy, name, ha=lha,
-                va="top" if ldy < 0 else "center",
-                fontsize=10 if star else 9,
+        ax.text(x + ldx, y + ldy, name, ha=lha, va="top",
+                fontsize=10 if star else 8.6,
                 fontweight="bold" if star else "normal",
                 color=ACCENT if star else INK)
-    # shaded "goal" region
-    ax.add_patch(Rectangle((5, 5), 5, 5, color=ACCENT, alpha=0.06, zorder=0))
-    ax.text(7.5, 5.25, "verified + self-extending", ha="center", fontsize=8,
-            color=ACCENT, style="italic")
+    ax.text(7.5, 5.2, "directly executable\n+ self-extending", ha="center",
+            fontsize=8, color=ACCENT, style="italic")
     for s in ax.spines.values():
         s.set_color("#B9C2D2")
     ax.set_xticks([]); ax.set_yticks([])
@@ -295,17 +301,19 @@ def fig_monotonic():
     fig, ax = plt.subplots(figsize=(4.7, 3.9))
     panel(ax, "y")
     seeds = {"seed 42": (10, 11), "seed 100": (9, 11), "seed 1337": (9, 10)}
-    for name, (cold, warm) in seeds.items():
+    for i, (name, (cold, warm)) in enumerate(seeds.items()):
         ax.plot([0, 1], [cold, warm], "-o", color=ACC_LT, lw=1.7, ms=6,
-                zorder=2)
-        ax.text(1.04, warm + (0.12 if name != "seed 1337" else -0.02), name,
-                fontsize=8.5, color=INK, va="center")
-    ax.plot([0, 1], [9.33, 10.67], "-o", color=ACCENT, lw=3.2, ms=9, zorder=3)
-    ax.text(-0.05, 9.33, "mean 9.33", ha="right", va="center", fontsize=9,
+                zorder=2, label="per seed (n=3)" if i == 0 else None)
+    ax.plot([0, 1], [9.33, 10.67], "-o", color=ACCENT, lw=3.2, ms=9, zorder=3,
+            label="mean")
+    ax.text(-0.06, 9.33, "9.33", ha="right", va="center", fontsize=9.5,
             color=ACCENT, fontweight="bold")
-    ax.text(1.16, 11.1, "mean 10.67\n(+1.33, all 3 ↑)", ha="left", va="center",
-            fontsize=9, color=ACCENT, fontweight="bold")
-    ax.set_xlim(-0.55, 1.95); ax.set_ylim(8.3, 12.0); ax.set_xticks([0, 1])
+    ax.text(1.06, 10.67, "10.67", ha="left", va="center", fontsize=9.5,
+            color=ACCENT, fontweight="bold")
+    ax.text(0.5, 8.62, "+1.33 tasks — all 3 seeds improve", ha="center",
+            va="center", fontsize=9, color=ACCENT)
+    ax.legend(frameon=False, fontsize=8.5, loc="upper left")
+    ax.set_xlim(-0.5, 1.6); ax.set_ylim(8.3, 12.0); ax.set_xticks([0, 1])
     ax.set_xticklabels(["Cold\n(empty corpus)", "Warm\n(built corpus)"])
     ax.set_ylabel("Tasks solved (of 15)")
     save(fig, "fig_monotonic")
@@ -418,16 +426,16 @@ def fig_baselines():
     ax.barh(yy, vals, xerr=errs, color=cols, capsize=4, edgecolor="white",
             lw=1.0, error_kw=dict(ecolor=INK, lw=1.1))
     for y, v in zip(yy, vals):
-        ax.text(v - 0.25, y, f"{v:+.2f}", va="center", ha="right", fontsize=8.5,
-                color="white" if v < -1.3 else INK)
+        ax.text(v - 0.18, y, f"{v:+.2f}", va="center", ha="right", fontsize=9,
+                color=INK, bbox=dict(fc="white", ec="none", pad=0.6, alpha=0.9))
     ax.axvline(0, color=INK, lw=0.9)
     ax.set_yticks(yy); ax.set_yticklabels(labels, fontsize=9)
     ax.set_xlabel("Warm − cold success-rate Δ (tasks, of 12)")
-    ax.set_xlim(-9.2, 1.2)
+    ax.set_xlim(-9.6, 1.3)
     ax.annotate("", xy=(0.6, yy[3]), xytext=(0.6, yy[4]),
                 arrowprops=dict(arrowstyle="-", color=ACCENT, lw=1.4))
-    ax.text(0.78, (yy[3] + yy[4]) / 2, "indistinguishable\n(p≈0.84)", fontsize=8,
-            color=ACCENT, va="center")
+    ax.text(0.8, (yy[3] + yy[4]) / 2, "indistinguishable\n(p≈0.84)", fontsize=8,
+            color=ACCENT, va="center", ha="center")
     save(fig, "fig_baselines")
 
 
@@ -468,8 +476,10 @@ def fig_selector():
              label="MiniLM-L6")
     axL.plot(bge_tau, bge_func, "-s", color=GOLD, lw=2.2, ms=5,
              label="bge-large")
-    axL.axhline(75.6, color=GRAY, ls="--", lw=1.8)
-    axL.text(0.41, 77.5, "agentic LLM (75.6%)", fontsize=8, color=GRAY)
+    axL.axhline(75.6, color=BAD, ls="--", lw=1.8)
+    axL.text(0.62, 73.0, "agentic LLM (75.6%)", fontsize=8.5, color=BAD,
+             ha="center", va="top",
+             bbox=dict(fc="white", ec="none", pad=0.6, alpha=0.9))
     axL.set_xlabel("Threshold τ"); axL.set_ylabel("Functional accuracy (%)")
     axL.set_ylim(55, 105); axL.legend(frameon=False, fontsize=8.5,
                                       loc="lower left")
@@ -477,8 +487,9 @@ def fig_selector():
     axR.plot(mini_tau, mini_fp, "-o", color=ACCENT, lw=2.2, ms=5,
              label="MiniLM-L6")
     axR.plot(bge_tau, bge_fp, "-s", color=GOLD, lw=2.2, ms=5, label="bge-large")
-    axR.axhline(0, color=GRAY, ls="--", lw=1.8)
-    axR.text(0.6, 4, "agentic LLM (0%)", fontsize=8, color=GRAY)
+    axR.axhline(0, color=BAD, ls="--", lw=1.8)
+    axR.text(0.62, 8, "agentic LLM (0%)", fontsize=8.5, color=BAD, ha="center",
+             bbox=dict(fc="white", ec="none", pad=0.6, alpha=0.9))
     axR.set_xlabel("Threshold τ"); axR.set_ylabel("False-pick rate (%)")
     axR.set_ylim(-4, 100); axR.legend(frameon=False, fontsize=8.5,
                                       loc="upper right")

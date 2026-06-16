@@ -82,6 +82,7 @@ PreAct sits at the intersection of five literatures: computer-using agents, the 
 \toprule
 \textbf{System} & \textbf{Memory representation} & \textbf{Replay fidelity} & \textbf{Fallback path} & \textbf{Self-extension} \\
 \midrule
+Skill libraries (e.g.\ Voyager) & Code skills & LLM-bound (skill called by agent) & LLM & Grows/self-verifies skill library \\
 Muscle-Mem & Linear tool calls & Direct & Agent on cache miss & Append cache only \\
 AgentRR & Multi-level experiences & Indirect & LLM & Append only \\
 Workflow-Use & Linear scripts & Direct & Agent & Append only \\
@@ -94,7 +95,7 @@ ActionEngine & State machine via crawl & Flat-Python generated & None & Re-crawl
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.66\linewidth]{fig_landscape.pdf}
-\caption{Where PreAct sits. Prior systems either store directly-runnable artifacts \emph{or} refine what they store, but not both, and none verifies a stored artifact against an independent evaluator. PreAct occupies the upper-right: a verified, self-extending corpus of directly-executable programs. Axes are qualitative.}
+\caption{Where PreAct sits, along the two properties it is designed to combine. Many prior systems achieve one or the other. \emph{Record-and-replay} systems (Muscle-Mem, Workflow-Use) and classical RPA run their stored artifact \emph{without} an LLM, but only append it (top-left). \emph{Skill and memory} systems---Voyager, TroVE, ExpeL, Mem0/A-MEM---genuinely self-extend, and some (Voyager, TroVE) even self-verify what they add, but they invoke it \emph{through} an LLM at run time (bottom-right). PreAct's distinction is the \emph{combination}: a directly-executable artifact (no LLM in the loop at replay) grown through verified, in-place refinement. Axes are qualitative.}
 \label{fig:landscape}
 \end{figure}
 
