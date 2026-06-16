@@ -78,6 +78,23 @@
 .res__sel-bar { height: 7px; background: linear-gradient(90deg, var(--replay), var(--pass)); border-radius: 4px; max-width: 70px; }
 .res__sel-num { font-size: 0.76rem; color: var(--ink-soft); }
 
+/* in-section subsection headers (1 — why verification matters / 2 — what didn't) */
+.res__subhead {
+  margin: 40px 0 24px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+  max-width: 760px;
+}
+.res__subhead .divider-num { display: block; margin-bottom: 10px; }
+.res__subhead-h {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  line-height: 1.18;
+  margin-bottom: 12px;
+}
+.res__subhead p { color: var(--ink-soft); line-height: 1.6; }
+.res__subhead em { color: var(--ink); font-style: normal; font-weight: 600; }
+
 .res__neg-head { margin: 14px 0 20px; }
 .res__neg-head h3 { font-size: 1.7rem; }
 .res__neg-head em { color: var(--fail); font-style: italic; }

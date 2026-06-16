@@ -17,10 +17,22 @@ export default function Results() {
       <div className="shell">
         <Reveal className="section-head">
           <span className="divider-num">§6 — RESULTS</span>
-          <h2>The check is what matters. The extras don’t.</h2>
+          <h2>What we found.</h2>
           <p>
-            Across all three benchmarks, turning the verification check on or off is what decides
-            whether repeated runs improve or get worse. What we expected to matter mostly didn’t.
+            Two findings, in plain terms. First, the re-check before saving is what makes reuse
+            actually pay off. Second, most of the pieces we expected to matter did not.
+          </p>
+        </Reveal>
+
+        {/* ===== 1 · why verification matters ===== */}
+        <Reveal className="res__subhead">
+          <span className="divider-num signal-pass">1 — WHY VERIFICATION MATTERS</span>
+          <h3 className="res__subhead-h">Re-checking each program is what keeps the agent improving.</h3>
+          <p>
+            The same library that makes a repeated task cheap can quietly make it wrong — if it
+            keeps a program that runs to the end but never actually does the job. Re-running every
+            new program from a clean start, and saving it only if the task was truly solved, is what
+            keeps repeated runs getting <em>better</em> instead of slowly decaying.
           </p>
         </Reveal>
 
@@ -150,46 +162,7 @@ export default function Results() {
           </div>
         </Reveal>
 
-        {/* ── selector ablation ── */}
-        <Reveal className="res__card panel" delay={0.05}>
-          <span className="tag"><span className="dot bg-replay" /> SELECTOR ABLATION</span>
-          <h3>A tuned embedding selector matches the agentic LLM.</h3>
-          <p className="scrim">Functional retrieval vs false-pick across operating points on the 58-program corpus. The hypothesis we entered with did not survive the data.</p>
-          <div className="res__sel">
-            <div className="res__sel-head mono">
-              <span>selector</span><span>τ</span><span>functional</span><span>no-pick</span><span>false-pick</span>
-            </div>
-            {SELECTOR_ABLATION.map((s, i) => (
-              <div key={i} className={`res__sel-row ${s.best ? 'is-best' : ''} ${s.agentic ? 'is-agentic' : ''}`}>
-                <span className="res__sel-name">{s.sel}{s.best && <span className="res__sel-flag mono">optimum</span>}</span>
-                <span className="mono">{s.tau}</span>
-                <span className="res__sel-bar-cell">
-                  <span className="res__sel-bar" style={{ width: `${s.functional}%` }} />
-                  <span className="mono res__sel-num">{s.functional}%</span>
-                </span>
-                <span className="mono scrim">{s.nopick}</span>
-                <span className={`mono ${s.falsepick > 0 ? 'signal-fail' : 'signal-pass'}`}>{s.falsepick}%</span>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-
-        {/* ── negative findings ── */}
-        <Reveal className="res__neg-head" delay={0.04}>
-          <h3>What didn’t matter</h3>
-          <p className="scrim">It’s easy to credit the wrong thing; here is what made little or no difference.</p>
-        </Reveal>
-        <div className="res__neg-grid">
-          {NEGATIVE_FINDINGS.map((n, i) => (
-            <Reveal key={n.title} className="res__neg panel" delay={i * 0.06}>
-              <div className="res__neg-verdict mono">{n.verdict}</div>
-              <h4>{n.title}</h4>
-              <p>{n.detail}</p>
-            </Reveal>
-          ))}
-        </div>
-
-        {/* ── cross-model + threats ── */}
+        {/* ── cross-model + threats (robustness of the same finding) ── */}
         <div className="res__pair">
           <Reveal className="res__card panel" delay={0.05}>
             <span className="tag"><span className="dot bg-pass" /> CROSS-MODEL PARITY</span>
@@ -224,6 +197,53 @@ export default function Results() {
               ))}
             </div>
           </Reveal>
+        </div>
+
+        {/* ===== 2 · what didn't matter ===== */}
+        <Reveal className="res__subhead">
+          <span className="divider-num signal-fail">2 — WHAT DIDN’T MATTER</span>
+          <h3 className="res__subhead-h">The pieces we expected to carry the result mostly didn’t.</h3>
+          <p>
+            It’s easy to credit the wrong thing. Careful prompt wording, hand-written guardrails, even
+            how programs are picked from the library — each made little or no measurable difference.
+            The re-check, plus falling back to the full agent when no saved program fits, are what
+            actually move the numbers.
+          </p>
+        </Reveal>
+
+        {/* ── selector ablation ── */}
+        <Reveal className="res__card panel" delay={0.05}>
+          <span className="tag"><span className="dot bg-replay" /> SELECTOR ABLATION</span>
+          <h3>A tuned embedding selector matches the agentic LLM.</h3>
+          <p className="scrim">Functional retrieval vs false-pick across operating points on the 58-program corpus. The hypothesis we entered with did not survive the data.</p>
+          <div className="res__sel">
+            <div className="res__sel-head mono">
+              <span>selector</span><span>τ</span><span>functional</span><span>no-pick</span><span>false-pick</span>
+            </div>
+            {SELECTOR_ABLATION.map((s, i) => (
+              <div key={i} className={`res__sel-row ${s.best ? 'is-best' : ''} ${s.agentic ? 'is-agentic' : ''}`}>
+                <span className="res__sel-name">{s.sel}{s.best && <span className="res__sel-flag mono">optimum</span>}</span>
+                <span className="mono">{s.tau}</span>
+                <span className="res__sel-bar-cell">
+                  <span className="res__sel-bar" style={{ width: `${s.functional}%` }} />
+                  <span className="mono res__sel-num">{s.functional}%</span>
+                </span>
+                <span className="mono scrim">{s.nopick}</span>
+                <span className={`mono ${s.falsepick > 0 ? 'signal-fail' : 'signal-pass'}`}>{s.falsepick}%</span>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+
+        {/* ── negative findings grid ── */}
+        <div className="res__neg-grid">
+          {NEGATIVE_FINDINGS.map((n, i) => (
+            <Reveal key={n.title} className="res__neg panel" delay={i * 0.06}>
+              <div className="res__neg-verdict mono">{n.verdict}</div>
+              <h4>{n.title}</h4>
+              <p>{n.detail}</p>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>
