@@ -52,7 +52,7 @@ export default function Nav() {
             </a>
           ))}
         </nav>
-        <a className="nav__cta" href="#cite">Paper ↗</a>
+        <a className="nav__cta" href="https://arxiv.org/abs/2606.17929" target="_blank" rel="noreferrer">Paper ↗</a>
       </div>
     </header>
   )

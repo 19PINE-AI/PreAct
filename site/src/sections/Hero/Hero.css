@@ -67,6 +67,8 @@
   color: var(--ink-mute);
   max-width: 520px;
 }
+.hero__paper a { color: var(--ink-soft); transition: color 0.15s; }
+.hero__paper a:hover { color: var(--pass); }
 
 .hero__cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 56px; }
 

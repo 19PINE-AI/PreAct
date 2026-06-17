@@ -14,7 +14,8 @@ export default function Footer() {
               Each experiment in the paper can be reproduced by flipping a single setting.
             </p>
             <div className="footer__links">
-              <a className="btn btn-primary" href="https://github.com/19PINE-AI/PreAct" target="_blank" rel="noreferrer">github.com/19PINE-AI/PreAct ↗</a>
+              <a className="btn btn-primary" href="https://arxiv.org/abs/2606.17929" target="_blank" rel="noreferrer">arXiv:2606.17929 ↗</a>
+              <a className="btn" href="https://github.com/19PINE-AI/PreAct" target="_blank" rel="noreferrer">github.com/19PINE-AI/PreAct ↗</a>
               <a className="btn" href="https://01.me/research/PreAct/" target="_blank" rel="noreferrer">01.me/research/PreAct ↗</a>
             </div>
           </div>
@@ -31,12 +32,12 @@ export default function Footer() {
 
         <Reveal className="footer__cite" delay={0.06}>
           <span className="divider-num">CITE</span>
-          <pre className="footer__bib mono">{`@article{preact2026,
-  title  = {PreAct: Computer-Using Agents that
-            Get Faster on Repeated Tasks},
-  author = {Bojie Li},
-  year   = {2026},
-  note   = {Pine AI},
+          <pre className="footer__bib mono">{`@article{li2026preact,
+  title   = {PreAct: Computer-Using Agents that
+             Get Faster on Repeated Tasks},
+  author  = {Li, Bojie},
+  journal = {arXiv preprint arXiv:2606.17929},
+  year    = {2026},
 }`}</pre>
         </Reveal>
 

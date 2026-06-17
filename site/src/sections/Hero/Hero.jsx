@@ -34,7 +34,9 @@ export default function Hero() {
           </motion.p>
 
           <motion.div variants={item} className="hero__paper">
-            <span className="mono">Paper: Computer-Using Agents that Get Faster on Repeated Tasks</span>
+            <a className="mono" href="https://arxiv.org/abs/2606.17929" target="_blank" rel="noreferrer">
+              Paper: Computer-Using Agents that Get Faster on Repeated Tasks · arXiv:2606.17929 ↗
+            </a>
           </motion.div>
 
           <motion.div variants={item} className="hero__cta">
