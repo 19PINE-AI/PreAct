@@ -54,13 +54,32 @@
   color: var(--ink);
 }
 
-/* stage */
+/* run bar — prominent controls at the top */
+.pg__runbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.pg__runbtn { font-size: 0.96rem; padding: 11px 22px; white-space: nowrap; }
+.pg__stepper { display: flex; align-items: center; gap: 8px; }
+.pg__stepper-pos { font-size: 0.74rem; color: var(--ink-soft); min-width: 78px; text-align: center; }
+.pg__flow { font-size: 0.74rem; margin-left: auto; }
+
+/* stage — left: program + current op (wide) · right: the real screen */
 .pg__stage {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 26px;
   align-items: start;
 }
+.pg__left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.pg__screen { display: flex; justify-content: center; }
 
 /* left — compiled program source */
 .pg__code { padding: 0; overflow: hidden; }
@@ -90,31 +109,30 @@
 .pg__src--done { color: var(--amber); }
 .pg__src--dim { color: var(--ink-mute); }
 
-/* right — the executor running */
-.pg__run { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.pg__run--phone { width: 244px; }
-.pg__run--browser,
-.pg__run--window { width: 420px; }
+/* the screen frames */
+.pg__screen--phone { width: 296px; }
+.pg__screen--browser,
+.pg__screen--window { width: 520px; max-width: 100%; }
 
 /* phone bezel (Android) */
 .pg__phone-bezel {
   position: relative;
-  width: 244px;
-  padding: 12px 10px 14px;
+  width: 296px;
+  padding: 13px 12px 16px;
   background: linear-gradient(160deg, #1b1f29, #0d1016);
   border: 1px solid var(--line-strong);
-  border-radius: 30px;
+  border-radius: 34px;
   box-shadow: 0 20px 50px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.03);
 }
 .pg__phone-cam {
   position: absolute;
-  top: 7px; left: 50%; transform: translateX(-50%);
-  width: 6px; height: 6px; border-radius: 50%;
+  top: 8px; left: 50%; transform: translateX(-50%);
+  width: 7px; height: 7px; border-radius: 50%;
   background: #05070b; box-shadow: 0 0 0 2px rgba(255,255,255,0.04);
 }
 .pg__phone-screen {
-  width: 224px; height: 470px;
-  border-radius: 18px; overflow: hidden; background: #fff;
+  width: 272px; height: 590px;
+  border-radius: 20px; overflow: hidden; background: #fff;
 }
 .pg__phone-screen img { width: 100%; display: block; }
 
@@ -206,25 +224,24 @@
 .pg__op-expect strong { font-weight: 600; }
 .pg__op-result { font-size: 0.8rem; }
 
-/* controls */
-.pg__controls { display: flex; align-items: center; gap: 8px; justify-content: center; }
+/* step controls (in the run bar) */
 .pg__ctrl {
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: var(--ink-soft);
-  padding: 8px 11px;
+  padding: 8px 12px;
   border-radius: 8px;
   font-size: 0.8rem;
 }
 .pg__ctrl:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
 .pg__ctrl:disabled { opacity: 0.3; cursor: default; }
-.pg__progress { text-align: center; font-size: 0.72rem; }
 
 .pg__foot { margin-top: 24px; font-size: 0.85rem; text-align: center; line-height: 1.6; max-width: 760px; margin-left: auto; margin-right: auto; }
 
 @media (max-width: 920px) {
-  .pg__stage { grid-template-columns: 1fr; justify-items: center; }
-  .pg__code { width: 100%; order: 2; }
-  .pg__run { order: 1; max-width: 100%; }
-  .pg__run--browser, .pg__run--window { width: 100%; max-width: 460px; }
+  .pg__stage { grid-template-columns: 1fr; }
+  .pg__left { order: 2; }
+  .pg__screen { order: 1; }
+  .pg__screen--browser, .pg__screen--window { width: 100%; max-width: 520px; }
+  .pg__flow { margin-left: 0; width: 100%; }
 }

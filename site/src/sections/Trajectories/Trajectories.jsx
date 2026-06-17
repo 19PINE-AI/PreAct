@@ -130,62 +130,68 @@ export default function Trajectories() {
           ))}
         </Reveal>
 
-        <Reveal className="pg__stage" delay={0.08}>
-          {/* left — the compiled program, as source */}
-          <div className="pg__code panel" ref={codeRef}>
-            <div className="pg__code-head mono scrim">
-              <span>compiled program · {meta.sub}</span>
-              <span className="pg__code-task">{prog.task}</span>
-            </div>
-            <pre className="pg__pre">
-              {lines.map((ln, k) => (
-                <div key={k} className={`pg__line ${active(ln) ? 'is-active' : ''}`}>
-                  <span className="pg__ln mono">{ln.t ? String(k + 1).padStart(2, '0') : ''}</span>
-                  <span className={`pg__src mono pg__src--${ln.c || 'plain'}`}>{ln.t || ' '}</span>
-                </div>
-              ))}
-            </pre>
-          </div>
-
-          {/* right — the executor running, on the real screen where we have it */}
-          <div className={`pg__run pg__run--${meta.frame}`}>
-            <Screen frame={meta.frame} src={shot} state={state} app={prog.app} />
-
-            <div className={`pg__op pg__op--${cur.type}`}>
-              {cur.type === 'verify' ? (
-                <>
-                  <span className="pg__op-tag mono">VERIFY</span>
-                  <div className="pg__op-body">
-                    <span className="pg__op-state mono">state {state.id}</span>
-                    <div className="pg__op-expect">
-                      expects <strong>{state.verify}</strong>
-                    </div>
-                    <div className="pg__op-result signal-pass">
-                      {cur.terminal ? '✓ goal reached' : '✓ the screen matches'}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <span className="pg__op-tag pg__op-tag--act mono">DO</span>
-                  <div className="pg__op-body">
-                    <span className="pg__op-state mono">state {state.id}</span>
-                    <div className="pg__op-expect"><strong>{cur.tr.action}</strong></div>
-                    <div className="pg__op-result signal-replay">→ then move to {cur.tr.to}</div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="pg__controls">
+        <Reveal className="pg__exec" delay={0.08}>
+          {/* run bar — prominent controls, up top where they are easy to find */}
+          <div className="pg__runbar">
+            <button className="btn btn-primary pg__runbtn" onClick={playing ? stop : play}>
+              {playing ? '⏸ pause' : op >= last ? '↻ run again' : '▶ run program'}
+            </button>
+            <div className="pg__stepper">
               <button className="pg__ctrl" onClick={() => seek(op - 1)} disabled={op === 0}>‹ step</button>
-              <button className="btn btn-primary" onClick={playing ? stop : play}>
-                {playing ? '⏸ pause' : op >= last ? '↻ run again' : '▶ run'}
-              </button>
+              <span className="pg__stepper-pos mono">op {Math.min(op, last) + 1} / {ops.length}</span>
               <button className="pg__ctrl" onClick={() => seek(op + 1)} disabled={op >= last}>step ›</button>
             </div>
-            <div className="pg__progress mono scrim">
-              op {Math.min(op, last) + 1} / {ops.length} · verify → do → verify → do …
+            <span className="pg__flow mono scrim">verify → do → verify → do …</span>
+          </div>
+
+          <div className="pg__stage">
+            {/* left — the compiled program + the operation running right now */}
+            <div className="pg__left">
+              <div className="pg__code panel" ref={codeRef}>
+                <div className="pg__code-head mono scrim">
+                  <span>compiled program · {meta.sub}</span>
+                  <span className="pg__code-task">{prog.task}</span>
+                </div>
+                <pre className="pg__pre">
+                  {lines.map((ln, k) => (
+                    <div key={k} className={`pg__line ${active(ln) ? 'is-active' : ''}`}>
+                      <span className="pg__ln mono">{ln.t ? String(k + 1).padStart(2, '0') : ''}</span>
+                      <span className={`pg__src mono pg__src--${ln.c || 'plain'}`}>{ln.t || ' '}</span>
+                    </div>
+                  ))}
+                </pre>
+              </div>
+
+              <div className={`pg__op pg__op--${cur.type}`}>
+                {cur.type === 'verify' ? (
+                  <>
+                    <span className="pg__op-tag mono">VERIFY</span>
+                    <div className="pg__op-body">
+                      <span className="pg__op-state mono">state {state.id}</span>
+                      <div className="pg__op-expect">
+                        expects <strong>{state.verify}</strong>
+                      </div>
+                      <div className="pg__op-result signal-pass">
+                        {cur.terminal ? '✓ goal reached' : '✓ the screen matches'}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="pg__op-tag pg__op-tag--act mono">DO</span>
+                    <div className="pg__op-body">
+                      <span className="pg__op-state mono">state {state.id}</span>
+                      <div className="pg__op-expect"><strong>{cur.tr.action}</strong></div>
+                      <div className="pg__op-result signal-replay">→ then move to {cur.tr.to}</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* right — the real screen where we have it */}
+            <div className={`pg__screen pg__screen--${meta.frame}`}>
+              <Screen frame={meta.frame} src={shot} state={state} app={prog.app} />
             </div>
           </div>
         </Reveal>
