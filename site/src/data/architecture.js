@@ -89,13 +89,13 @@ export const ACTION_SCHEMA = [
 ]
 
 export const ENV_KNOBS = [
-  { k: 'PREACT_VERIFY_GATE', v: 'on / off', d: 'The main experiment — turn the verification check on or off.' },
-  { k: 'PREACT_CACHE_MISS_FALLBACK', v: 'cua / skip', d: 'When the check rejects everything, let the full agent solve the repeat run.' },
+  { k: 'PREACT_VERIFY_BEFORE_STORE', v: 'on / off', d: 'The main experiment — the store-time check (WebArena; Android/OSWorld use the --no-verify-before-store flag).' },
+  { k: 'PREACT_CACHE_MISS_FALLBACK', v: 'skip / cua', d: 'When the check rejects everything, let the full agent solve the repeat run.' },
   { k: 'PREACT_SELECTOR_MODE', v: 'agentic / embedding', d: 'Pick saved programs with an LLM or with a plain embedding search.' },
   { k: 'PREACT_COMPILE_PROVIDER', v: 'claude / gemini', d: 'Swap the compile-step LLM (cross-model robustness).' },
   { k: 'PREACT_RUNTIME_MODE', v: 'state_machine / flat_script', d: 'Run programs as checked graphs or as flat scripts.' },
   { k: 'PREACT_GUARDRAILS', v: 'on / off', d: 'Extra hand-written runtime safeguards.' },
-  { k: 'PREACT_LLM_PROVIDER', v: 'claude / gemini', d: 'Which model the full agent uses.' },
+  { k: 'PREACT_CUA_PROVIDER', v: 'gemini / anthropic', d: 'Which model the AndroidWorld agent uses for steps.' },
 ]
 
 export const MODULES = [

@@ -20,13 +20,13 @@ export default function Footer() {
             </div>
           </div>
           <div className="footer__repro mono">
-            <div className="footer__repro-row"><span className="scrim"># cold → warm, gate ablation</span></div>
-            <div className="footer__repro-row"><span className="signal-pass">PREACT_VERIFY_GATE</span>=on \</div>
-            <div className="footer__repro-row footer__indent">python -m benchmark.androidworld.run_docker \</div>
-            <div className="footer__repro-row footer__indent">--tasks official-15 --seed 42</div>
+            <div className="footer__repro-row"><span className="scrim"># verify-before-store ablation</span></div>
+            <div className="footer__repro-row">python -m benchmark.androidworld.run_docker \</div>
+            <div className="footer__repro-row footer__indent">--tasks $OFFICIAL_15 --seed 42 \</div>
+            <div className="footer__repro-row footer__indent"><span className="signal-pass">--no-verify-before-store</span>  <span className="scrim"># gate off</span></div>
             <div className="footer__repro-row footer__spacer"> </div>
-            <div className="footer__repro-row"><span className="scrim"># env data: rag_db_*/ · *.log</span></div>
-            <div className="footer__repro-row"><span className="scrim"># tables: paper/findings_summary.md</span></div>
+            <div className="footer__repro-row"><span className="scrim"># WebArena gate: PREACT_VERIFY_BEFORE_STORE=off</span></div>
+            <div className="footer__repro-row"><span className="scrim"># full guide: README · tables: RESULTS.md</span></div>
           </div>
         </Reveal>
 
