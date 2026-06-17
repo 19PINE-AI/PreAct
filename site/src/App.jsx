@@ -3,7 +3,6 @@ import Hero from './sections/Hero/Hero'
 import Problem from './sections/Problem/Problem'
 import Trajectories from './sections/Trajectories/Trajectories'
 import Demo from './sections/Demo/Demo'
-import Executor from './sections/Executor/Executor'
 import Results from './sections/Results/Results'
 import Footer from './layout/Footer/Footer'
 
@@ -16,7 +15,6 @@ export default function App() {
         <Problem />
         <Trajectories />
         <Demo />
-        <Executor />
         <Results />
       </main>
       <Footer />

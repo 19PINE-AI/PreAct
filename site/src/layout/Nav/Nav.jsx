@@ -5,7 +5,6 @@ const LINKS = [
   ['problem', 'Problem'],
   ['programs', 'Programs'],
   ['demo', 'The check'],
-  ['executor', 'Under the hood'],
   ['results', 'Results'],
 ]
 
